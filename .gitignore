@@ -1,0 +1,20 @@
+# Build output (make / make dist)
+/build/
+/dep/
+/dist/
+/plugin.dll
+/plugin.so
+/plugin.dylib
+*.vcvplugin
+*.o
+*.d
+build.log
+
+# Editors and OS
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
