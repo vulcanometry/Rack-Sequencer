@@ -1,9 +1,9 @@
 {
-  "slug": "GridSequence",
-  "name": "Grid Sequence",
+  "slug": "Vulcanometry",
+  "name": "Vulcanometry",
   "version": "1.0.0",
   "license": "MIT",
-  "brand": "Grid Sequence",
+  "brand": "Vulcanometry",
   "author": "Vulcanometry",
   "authorEmail": "vulcanometry@gmail.com",
   "authorUrl": "https://github.com/vulcanometry",
