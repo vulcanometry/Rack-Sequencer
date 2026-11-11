@@ -2007,18 +2007,27 @@ struct PanelLabel : TransparentWidget {
 
 /** Song name text box, in the right-click menu and the rename popup. Enter or Escape closes it. */
 struct SongNameField : ui::TextField {
-	GridSequencer* module = nullptr;
+	// Looked up by id, not held as a pointer: the module can be deleted while the box is open
+	// (Delete in the same context menu), and the box is only destroyed afterwards
+	int64_t moduleId = -1;
 	// Name when the box opened; closing it records the rename as one undo step
 	std::string oldName;
 
 	void start(GridSequencer* m) {
-		module = m;
+		moduleId = m->id;
 		oldName = m->songName;
 		setText(m->songName);
 	}
 
+	GridSequencer* getModule() {
+		if (moduleId < 0 || !APP->engine)
+			return nullptr;
+		return dynamic_cast<GridSequencer*>(APP->engine->getModule(moduleId));
+	}
+
 	~SongNameField() {
-		if (module && module->songName != oldName) {
+		GridSequencer* module = getModule();
+		if (module && module->songName != oldName && APP->history) {
 			SongNameAction* h = new SongNameAction;
 			h->moduleId = module->id;
 			h->name = "rename song";
@@ -2029,7 +2038,7 @@ struct SongNameField : ui::TextField {
 	}
 
 	void onChange(const ChangeEvent& e) override {
-		if (module)
+		if (GridSequencer* module = getModule())
 			module->songName = text;
 		ui::TextField::onChange(e);
 	}
