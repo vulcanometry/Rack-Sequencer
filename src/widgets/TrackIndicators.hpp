@@ -16,10 +16,12 @@ struct GroupBrackets : TransparentWidget {
 
 
 /**
- * Under a poly track's number, how many notes it plays at once ("x3"). Left out when it sends its
- * voices to other tracks' jacks: the bar beside the numbers shows that group instead.
+ * Under a track's number: the pattern it loops ("P03", on a tab of the track colour; blinking
+ * while it waits for the next pattern to rejoin the song), or else for a poly track how many notes
+ * it plays at once ("x3"). The voice count is left out when the track sends its voices to other
+ * tracks' jacks: the bar beside the numbers shows that group instead.
  */
-struct VoiceCountLabel : TransparentWidget {
+struct TrackBadge : TransparentWidget {
 	GridSequencer* module = nullptr;
 	int track = 0;
 

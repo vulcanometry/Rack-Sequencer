@@ -40,7 +40,7 @@ GridSequencer::GridSequencer() {
 	configButton(SCROLL_UP_PARAM, "Scroll grid up");
 	configButton(SCROLL_DOWN_PARAM, "Scroll grid down");
 	for (int t = 0; t < NUM_TRACKS; t++) {
-		configButton(TRACK_PARAM + t, string::f("Edit track %d", t + 1));
+		configButton(TRACK_PARAM + t, string::f("Edit track %d (Shift+click: loop its pattern while the song moves on)", t + 1));
 		configButton(MUTE_PARAM + t, string::f("Mute track %d", t + 1));
 		configOutput(CV_OUTPUT + t, string::f("Track %d pitch (1V/oct; poly track: one channel per voice)", t + 1));
 		configOutput(GATE_OUTPUT + t, string::f("Track %d gate (poly track: one channel per voice)", t + 1));
@@ -66,6 +66,7 @@ void GridSequencer::saveSettings(TrackSettings& t) {
 	std::memcpy(t.spreadVoices, spreadVoices, sizeof(t.spreadVoices));
 	std::memcpy(t.modMode, modMode, sizeof(t.modMode));
 	std::memcpy(t.modRange, modRange, sizeof(t.modRange));
+	std::memcpy(t.pinPattern, pinPattern, sizeof(t.pinPattern));
 	std::memcpy(t.modSmooth, modSmooth, sizeof(t.modSmooth));
 }
 
@@ -75,8 +76,35 @@ void GridSequencer::loadSettings(const TrackSettings& t) {
 	std::memcpy(spreadVoices, t.spreadVoices, sizeof(spreadVoices));
 	std::memcpy(modMode, t.modMode, sizeof(modMode));
 	std::memcpy(modRange, t.modRange, sizeof(modRange));
+	std::memcpy(pinPattern, t.pinPattern, sizeof(pinPattern));
 	std::memcpy(modSmooth, t.modSmooth, sizeof(modSmooth));
 	routeOutputs();
+}
+
+
+void GridSequencer::togglePin(int track) {
+	if (pinPattern[track] >= 0)
+		pinPattern[track] = -1;
+	// Still looping on its way back to the song: keep it looping
+	else if (looping(track))
+		pinPattern[track] = loopPattern[track];
+	else
+		pinPattern[track] = following() ? playingPattern : editPattern();
+}
+
+
+void GridSequencer::syncLoops(bool boundary) {
+	for (int t = 0; t < NUM_TRACKS; t++) {
+		if (pinPattern[t] >= 0) {
+			// Newly pinned: the loop carries on from the step the track is on, so nothing jumps
+			if (!looping(t))
+				loopStep[t] = trackStep[t];
+			loopPattern[t] = pinPattern[t];
+		}
+		else if (boundary) {
+			loopPattern[t] = -1;
+		}
+	}
 }
 
 
@@ -123,6 +151,7 @@ void GridSequencer::clearAll() {
 		modSmooth[t] = true;
 		voices[t] = 1;
 		spreadVoices[t] = false;
+		pinPattern[t] = -1;
 		muted[t] = false;
 	}
 	songLength = 0;
@@ -144,8 +173,11 @@ void GridSequencer::resetPlayback() {
 	phase = 1.0;
 	stepTimer = 0.0;
 	playingPattern = playingSong() ? song[0] : editPattern();
-	for (int t = 0; t < NUM_TRACKS; t++)
+	for (int t = 0; t < NUM_TRACKS; t++) {
 		trackStep[t] = -1;
+		loopPattern[t] = pinPattern[t];
+		loopStep[t] = -1;
+	}
 	for (int l = 0; l < NUM_LANES; l++)
 		holdLeft[l] = 0;
 }
@@ -165,8 +197,9 @@ bool GridSequencer::trackHasNotes(int pattern, int track) {
 
 int GridSequencer::patternLength(int pattern) {
 	int length = 0;
+	// Looping tracks play their own loop, so they don't set how long the pattern lasts
 	for (int t = 0; t < NUM_TRACKS; t++)
-		if (trackHasNotes(pattern, t))
+		if (!looping(t) && trackHasNotes(pattern, t))
 			length = std::max(length, trackLength(pattern, t));
 	if (length == 0)
 		for (int t = 0; t < NUM_TRACKS; t++)
@@ -179,26 +212,35 @@ int GridSequencer::patternLength(int pattern) {
 void GridSequencer::stepForward() {
 	advance();
 	stepTimer = 0.0;
+	// A pin takes hold straight away; a track let go of rejoins the song when a pattern starts
+	syncLoops(step == 0);
 	for (int t = 0; t < NUM_TRACKS; t++) {
-		int length = trackLength(playingPattern, t);
-		int s = (step < 0) ? -1 : step % length;
+		int pattern = trackPattern(t);
+		int length = trackLength(pattern, t);
+		int s;
+		if (step < 0)
+			s = -1;
+		else if (looping(t))
+			s = loopStep[t] = (loopStep[t] + 1) % length;
+		else
+			s = step % length;
 		trackStep[t] = s;
 		for (int v = 0; v < MAX_VOICES; v++) {
 			int l = laneOf(t, v);
-			// A new pattern starts every voice afresh
-			if (holdLeft[l] > 0 && step != 0)
+			// A new pattern starts every voice afresh, except on looping tracks, which play on through it
+			if (holdLeft[l] > 0 && (step != 0 || looping(t)))
 				holdLeft[l]--;
 			else
 				holdLeft[l] = 0;
 			if (s < 0 || v >= voiceCount(t) || isVoiceOutput(t))
 				continue;
-			int row = notes[playingPattern][l][s];
+			int row = notes[pattern][l][s];
 			if (row >= 0) {
 				// Notes end at the track's loop point
-				holdLeft[l] = std::min((int) lengths[playingPattern][l][s], length - s);
+				holdLeft[l] = std::min((int) lengths[pattern][l][s], length - s);
 				holdRow[l] = row;
-				holdTie[l] = ties[playingPattern][l][s];
-				holdMod[l] = mods[playingPattern][l][s];
+				holdTie[l] = ties[pattern][l][s];
+				holdMod[l] = mods[pattern][l][s];
 			}
 		}
 	}
@@ -229,6 +271,12 @@ void GridSequencer::findNextModSteps() {
 		}
 	}
 	for (int t = 0; t < NUM_TRACKS; t++) {
+		// A looping track goes on round its own loop, unless it rejoins the song at the next step
+		if (nextPattern >= 0 && looping(t) && (pinPattern[t] >= 0 || nextStep != 0)) {
+			modNextPattern[t] = loopPattern[t];
+			modNextStep[t] = (loopStep[t] + 1) % trackLength(loopPattern[t], t);
+			continue;
+		}
 		modNextPattern[t] = std::max(nextPattern, 0);
 		modNextStep[t] = (nextPattern >= 0) ? nextStep % trackLength(modNextPattern[t], t) : -1;
 	}
@@ -237,7 +285,7 @@ void GridSequencer::findNextModSteps() {
 
 void GridSequencer::followPlayback() {
 	int playStep = trackStep[selectedTrack];
-	if (followPlayhead && running && step >= 0 && playStep >= 0 && playingPattern == viewPattern()
+	if (followPlayhead && running && step >= 0 && playStep >= 0 && trackPattern(selectedTrack) == viewPattern()
 		&& (playStep < viewStart || playStep >= viewStart + VIEW_STEPS))
 		setViewStart(playStep / VIEW_STEPS * VIEW_STEPS);
 }
@@ -324,6 +372,9 @@ void GridSequencer::process(const ProcessArgs& args) {
 		// first step of the next pattern.
 		if (running && step >= 0 && stepTimer < 1e-3) {
 			step--;
+			for (int t = 0; t < NUM_TRACKS; t++)
+				if (looping(t))
+					loopStep[t]--;
 			stepForward();
 		}
 	}
@@ -374,6 +425,9 @@ void GridSequencer::process(const ProcessArgs& args) {
 		scroll(-1);
 	// Keep the view valid when the scale (and so the row count) changes
 	scrollRow = clamp(scrollRow, 0, maxScroll());
+	// While stopped there is no next pattern to wait for: pins and releases apply at once
+	if (!running)
+		syncLoops(true);
 
 	// Clock
 	bool tick = false;
@@ -445,7 +499,7 @@ void GridSequencer::process(const ProcessArgs& args) {
 			// Per-step MOD doesn't depend on notes or gates: it flows from step to step
 			if (modMode[t] == MOD_PER_STEP) {
 				if (trackStep[t] >= 0) {
-					float value = stepMods[playingPattern][t][trackStep[t]];
+					float value = stepMods[trackPattern(t)][t][trackStep[t]];
 					if (modSmooth[t] && modNextStep[t] >= 0) {
 						float next = stepMods[modNextPattern[t]][t][modNextStep[t]];
 						value += (next - value) * modPhase;

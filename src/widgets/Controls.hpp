@@ -21,6 +21,15 @@ struct ModeButton : LightButton<VCVButton, MediumSimpleLight<SongModeLight>> {
 
 
 /**
+ * TRACK button: selects the track. Shift+click also pins it to the pattern it is playing, so it
+ * loops that while the song moves on (or lets it go again).
+ */
+struct TrackButton : VCVLightBezel<WhiteLight> {
+	void onButton(const ButtonEvent& e) override;
+};
+
+
+/**
  * Value display with < and > arrows for stepping through a whole-number parameter
  * (wrapping around at the ends). Click an arrow or use the mouse wheel to step; right-click
  * for the usual parameter menu. Each step is undoable.

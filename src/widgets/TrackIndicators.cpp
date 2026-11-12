@@ -20,9 +20,22 @@ void GroupBrackets::draw(const DrawArgs& args) {
 }
 
 
-void VoiceCountLabel::draw(const DrawArgs& args) {
-	if (!module)
+void TrackBadge::draw(const DrawArgs& args) {
+	if (!module || module->isVoiceOutput(track))
 		return;
+	if (module->looping(track)) {
+		bool rejoining = module->pinPattern[track] < 0;
+		if (rejoining && std::fmod(system::getTime(), 0.5) < 0.25)
+			return;
+		fillRect(args.vg, 0.f, 0.f, box.size.x, box.size.y, TRACK_COLORS[track], box.size.y / 2);
+		std::string text = string::f("P%02d", module->loopPattern[track] + 1);
+		setFont(args.vg, DISPLAY_FONT);
+		nvgFontSize(args.vg, 8.5f);
+		nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+		nvgFillColor(args.vg, nvgRGB(0x12, 0x14, 0x18));
+		nvgText(args.vg, box.size.x / 2, box.size.y / 2, text.c_str(), NULL);
+		return;
+	}
 	bool grouped = module->isVoiceOutput(track)
 		|| (track + 1 < NUM_TRACKS && module->ownerTrack[track + 1] == track);
 	if (grouped || module->voiceCount(track) < 2)

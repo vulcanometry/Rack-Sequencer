@@ -1,5 +1,20 @@
 #include "Controls.hpp"
 #include "Drawing.hpp"
+#include "../History.hpp"
+
+
+void TrackButton::onButton(const ButtonEvent& e) {
+	GridSequencer* m = dynamic_cast<GridSequencer*>(module);
+	if (m && e.action == GLFW_PRESS && e.button == GLFW_MOUSE_BUTTON_LEFT && (e.mods & RACK_MOD_MASK) == GLFW_MOD_SHIFT) {
+		// On a track whose jacks send another track's voice, this acts on that track (as selecting does)
+		int track = m->ownerTrack[paramId - GridSequencer::TRACK_PARAM];
+		trackSettingsEdit(m, m->pinPattern[track] >= 0 ? "stop looping track" : "loop track", [=]() {
+			m->togglePin(track);
+		});
+	}
+	// The press goes on to select the track as usual
+	VCVLightBezel<WhiteLight>::onButton(e);
+}
 
 
 int ValueStepper::sideAt(Vec pos) {

@@ -127,6 +127,7 @@ std::string GridSequencer::importMidi(const MidiFileData& midi, const std::strin
 		modMode[t] = MOD_PER_NOTE;
 		modRange[t] = 0;
 		modDefault[t] = DEFAULT_MOD;
+		pinPattern[t] = -1;
 		muted[t] = false;
 	}
 	selectedTrack = 0;
