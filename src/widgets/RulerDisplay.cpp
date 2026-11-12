@@ -63,8 +63,15 @@ void RulerDisplay::drawLayer(const DrawArgs& args, int layer) {
 	setFont(vg, DISPLAY_FONT);
 	nvgFontSize(vg, 9.5f);
 	nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-	nvgFillColor(vg, nvgRGB(0xb0, 0xb6, 0xc0));
-	nvgText(vg, lw / 2, h / 2, "STEP", NULL);
+	// The edited track's clock rate in its colour, when it isn't with the clock
+	if (module && module->clockRate[track] != DEFAULT_CLOCK_RATE) {
+		nvgFillColor(vg, trackColor);
+		nvgText(vg, lw / 2, h / 2, module->rate(track).name, NULL);
+	}
+	else {
+		nvgFillColor(vg, nvgRGB(0xb0, 0xb6, 0xc0));
+		nvgText(vg, lw / 2, h / 2, "STEP", NULL);
+	}
 
 	// Steps: active ones shaded by beat, step numbers on each beat
 	nvgFontSize(vg, 9.5f);

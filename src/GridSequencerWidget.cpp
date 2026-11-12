@@ -14,6 +14,7 @@
 struct GridSequencerWidget : ModuleWidget {
 	GridDisplay* grid = nullptr;
 	ModDisplay* modDisplay = nullptr;
+	ModDisplay* probDisplay = nullptr;
 
 	GridSequencerWidget(GridSequencer* module) {
 		setModule(module);
@@ -111,6 +112,13 @@ struct GridSequencerWidget : ModuleWidget {
 		modDisplay->module = module;
 		modDisplay->visible = false;
 		addChild(modDisplay);
+		// And the PROB view while the PROB button is lit
+		probDisplay = createWidget<ModDisplay>(grid->box.pos);
+		probDisplay->box.size = grid->box.size;
+		probDisplay->module = module;
+		probDisplay->prob = true;
+		probDisplay->visible = false;
+		addChild(probDisplay);
 
 		ScrollerDisplay* scroller = createWidget<ScrollerDisplay>(mm2px(Vec(displayX, 96.6f)));
 		scroller->box.size = mm2px(Vec(displayW, 4.6f));
@@ -129,9 +137,11 @@ struct GridSequencerWidget : ModuleWidget {
 		addParam(createParamCentered<TL1105>(mm2px(Vec(scrollX, 93.f)), module, GridSequencer::SCROLL_DOWN_PARAM));
 		addLabel(Vec(scrollX, 98.f), "DN", 9.f);
 
-		// Grid view: notes / MOD values
-		addLabel(Vec(scrollX, 51.f), "MOD", 8.5f);
-		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<WhiteLight>>>(mm2px(Vec(scrollX, 57.f)), module, GridSequencer::MOD_VIEW_PARAM, GridSequencer::MOD_VIEW_LIGHT));
+		// Grid view: notes / MOD values / note probabilities
+		addLabel(Vec(scrollX, 45.f), "MOD", 8.5f);
+		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<WhiteLight>>>(mm2px(Vec(scrollX, 51.f)), module, GridSequencer::MOD_VIEW_PARAM, GridSequencer::MOD_VIEW_LIGHT));
+		addLabel(Vec(scrollX, 60.f), "PROB", 8.5f);
+		addParam(createLightParamCentered<VCVLightLatch<MediumSimpleLight<WhiteLight>>>(mm2px(Vec(scrollX, 66.f)), module, GridSequencer::PROB_VIEW_PARAM, GridSequencer::PROB_VIEW_LIGHT));
 
 		// Song, pattern and track function buttons below the song strip
 		struct FunctionButton {
@@ -227,9 +237,10 @@ struct GridSequencerWidget : ModuleWidget {
 		if (!m)
 			return;
 
-		// Notes or MOD values in the grid area
+		// Notes, MOD values or probabilities in the grid area
 		modDisplay->visible = m->modView();
-		grid->visible = !modDisplay->visible;
+		probDisplay->visible = m->probView() && !modDisplay->visible;
+		grid->visible = !modDisplay->visible && !probDisplay->visible;
 
 		// Keep the playing steps in view, but not in the middle of a drag on the panel
 		Widget* dragged = APP->event->getDraggedWidget();
@@ -446,6 +457,47 @@ struct GridSequencerWidget : ModuleWidget {
 		};
 		menu->addChild(rotateItem("Rotate track one step later", 1));
 		menu->addChild(rotateItem("Rotate track one step earlier", -1));
+		menu->addChild(createSubmenuItem("Fill with a Euclidean rhythm", "", [=](Menu* sub) {
+			int pattern = module->viewPattern();
+			int length = module->trackLength(pattern, track);
+			sub->addChild(createMenuLabel(string::f("Notes spread evenly over the track's %d steps", length)));
+			sub->addChild(createMenuLabel("(replaces its notes; rotate to shift the rhythm)"));
+			for (int hits = 1; hits <= std::min(length, 32); hits++) {
+				// A preview of the rhythm, for tracks short enough to show it
+				std::string preview;
+				if (length <= 16)
+					for (int s = 0; s < length; s++)
+						preview += (s * hits % length < hits) ? "x" : "-";
+				sub->addChild(createMenuItem(string::f("%d of %d", hits, length), preview, [=]() {
+					module->patternEdit("Euclidean fill", pattern, [=]() {
+						module->euclideanFill(pattern, track, hits);
+					});
+				}));
+			}
+		}));
+		std::vector<std::string> rateLabels;
+		for (const ClockRate& r : CLOCK_RATES) {
+			if (r.div > 1)
+				rateLabels.push_back(string::f("%s (a step every %d clock steps)", r.name, r.div));
+			else if (r.mul > 1)
+				rateLabels.push_back(string::f("%s (%d steps per clock step)", r.name, r.mul));
+			else
+				rateLabels.push_back(string::f("%s (with the clock)", r.name));
+		}
+		menu->addChild(createIndexSubmenuItem("Clock rate", rateLabels,
+			[=]() { return (size_t) module->clockRate[track]; },
+			[=](size_t i) {
+				trackSettingsEdit(module, "change clock rate", [=]() {
+					module->clockRate[track] = (int) i;
+				});
+			}));
+		menu->addChild(createMenuItem("Set every note to always play (100% probability)", "", [=]() {
+			int pattern = module->viewPattern();
+			module->patternEdit("reset note probabilities", pattern, [=]() {
+				for (int v = 0; v < module->voiceCount(track); v++)
+					std::memset(module->probs[pattern][laneOf(track, v)], PROB_MAX, NUM_STEPS);
+			});
+		}));
 		std::vector<std::string> rangeLabels;
 		for (const ModRange& r : MOD_RANGES)
 			rangeLabels.push_back(r.name);
@@ -502,7 +554,12 @@ struct GridSequencerWidget : ModuleWidget {
 			});
 		}));
 		menu->addChild(new MenuSeparator);
-		menu->addChild(createMenuLabel("Sync"));
+		menu->addChild(createMenuLabel("Timing and sync"));
+		// 50% = straight; higher delays every second step
+		ui::Slider* swing = new ui::Slider;
+		swing->quantity = module->getParamQuantity(GridSequencer::SWING_PARAM);
+		swing->box.size.x = 220.f;
+		menu->addChild(swing);
 		menu->addChild(createBoolPtrMenuItem("RUN output: gate while running (instead of start/stop trigger)", "", &module->runOutputGate));
 		menu->addChild(createBoolPtrMenuItem("RUN IN: gate, high = run (instead of toggle on trigger)", "", &module->runInputGate));
 

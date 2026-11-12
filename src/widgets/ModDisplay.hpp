@@ -9,9 +9,13 @@
  *         track each step's column is split into a lane per voice.
  *   STEP: every step of the track has its own bar; the notes are marked along the bottom.
  * Press to set a value, or drag across to draw values; the wheel nudges the one under the mouse.
+ *
+ * With `prob` set it is the PROB view instead (while the PROB button is lit): the same, for each
+ * note's probability, which is always per note.
  */
 struct ModDisplay : Widget {
 	GridSequencer* module = nullptr;
+	bool prob = false;
 	bool dragging = false;
 	Vec dragPos;
 	int dragPattern = 0;
@@ -28,6 +32,12 @@ struct ModDisplay : Widget {
 	int hoverVoice = 0;
 	GridSequencer::PatternSnapshot undoBefore;
 
+	int maxValue() {
+		return prob ? PROB_MAX : MOD_MAX;
+	}
+	std::string editName() {
+		return prob ? "change note probability" : "change MOD value";
+	}
 	float labelW() {
 		return mm2px(9.f);
 	}
@@ -44,10 +54,10 @@ struct ModDisplay : Widget {
 		return box.size.y - mm2px(1.f);
 	}
 	float valueY(float value) {
-		return bottom() - (bottom() - top()) * value / MOD_MAX;
+		return bottom() - (bottom() - top()) * value / maxValue();
 	}
 	float valueAt(float y) {
-		return clamp((bottom() - y) / (bottom() - top()) * MOD_MAX, 0.f, (float) MOD_MAX);
+		return clamp((bottom() - y) / (bottom() - top()) * maxValue(), 0.f, (float) maxValue());
 	}
 	int stepAt(float x, int viewStart) {
 		return viewStart + (int) std::floor((x - labelW()) / cellW());
@@ -55,7 +65,7 @@ struct ModDisplay : Widget {
 	/** Voice (0..voices-1) whose lane is under `x` in its step's column. */
 	int voiceAt(float x, int lead);
 	bool perStep(int lead) {
-		return module->modMode[lead] == MOD_PER_STEP;
+		return !prob && module->modMode[lead] == MOD_PER_STEP;
 	}
 
 	/** The step (STEP mode) or note start on `voice` (NOTE mode) that `step` edits, or -1. */
@@ -65,6 +75,8 @@ struct ModDisplay : Widget {
 		return perStep(lead) ? step : module->noteStartCovering(pattern, laneOf(lead, voice), step);
 	}
 	uint8_t* valuePtr(int pattern, int lead, int voice, int target) {
+		if (prob)
+			return &module->probs[pattern][laneOf(lead, voice)][target];
 		return perStep(lead) ? &module->stepMods[pattern][lead][target] : &module->mods[pattern][laneOf(lead, voice)][target];
 	}
 

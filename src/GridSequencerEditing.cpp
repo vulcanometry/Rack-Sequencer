@@ -14,7 +14,7 @@ int GridSequencer::noteStartCovering(int pattern, int lane, int col) {
 }
 
 
-void GridSequencer::placeNote(int pattern, int lane, int s, int row, int length, bool tie, int mod) {
+void GridSequencer::placeNote(int pattern, int lane, int s, int row, int length, bool tie, int mod, int prob) {
 	int track = trackOfLane(lane);
 	int end = trackLength(pattern, track);
 	if (s >= end)
@@ -29,6 +29,7 @@ void GridSequencer::placeNote(int pattern, int lane, int s, int row, int length,
 	lengths[pattern][lane][s] = length;
 	ties[pattern][lane][s] = tie;
 	mods[pattern][lane][s] = mod >= 0 ? mod : modDefault[track];
+	probs[pattern][lane][s] = clamp(prob, 0, PROB_MAX);
 }
 
 
@@ -128,12 +129,14 @@ void GridSequencer::rotateLane(int pattern, int lane, int length, int delta) {
 	uint8_t* l = lengths[pattern][lane];
 	uint8_t* ti = ties[pattern][lane];
 	uint8_t* mo = mods[pattern][lane];
+	uint8_t* pr = probs[pattern][lane];
 	int8_t newNotes[NUM_STEPS];
-	uint8_t newLengths[NUM_STEPS], newTies[NUM_STEPS], newMods[NUM_STEPS];
+	uint8_t newLengths[NUM_STEPS], newTies[NUM_STEPS], newMods[NUM_STEPS], newProbs[NUM_STEPS];
 	std::memcpy(newNotes, n, sizeof(newNotes));
 	std::memcpy(newLengths, l, sizeof(newLengths));
 	std::memcpy(newTies, ti, sizeof(newTies));
 	std::memcpy(newMods, mo, sizeof(newMods));
+	std::memcpy(newProbs, pr, sizeof(newProbs));
 	for (int s = 0; s < length; s++) {
 		newNotes[s] = -1;
 		newLengths[s] = 1;
@@ -147,6 +150,7 @@ void GridSequencer::rotateLane(int pattern, int lane, int length, int delta) {
 		newLengths[d] = l[s];
 		newTies[d] = ti[s];
 		newMods[d] = mo[s];
+		newProbs[d] = pr[s];
 	}
 	// A note that now runs into the next one is cut short where that one starts
 	for (int s = 0; s < NUM_STEPS; s++) {
@@ -161,6 +165,27 @@ void GridSequencer::rotateLane(int pattern, int lane, int length, int delta) {
 	std::memcpy(l, newLengths, sizeof(newLengths));
 	std::memcpy(ti, newTies, sizeof(newTies));
 	std::memcpy(mo, newMods, sizeof(newMods));
+	std::memcpy(pr, newProbs, sizeof(newProbs));
+}
+
+
+void GridSequencer::euclideanFill(int pattern, int track, int hits) {
+	int length = trackLength(pattern, track);
+	hits = clamp(hits, 0, length);
+	int row = -1;
+	for (int s = 0; s < length && row < 0; s++)
+		for (int v = 0; v < voiceCount(track) && row < 0; v++)
+			if (notes[pattern][laneOf(track, v)][s] >= 0)
+				row = notes[pattern][laneOf(track, v)][s];
+	if (row < 0)
+		row = clamp(4 * scaleSize(), 0, numRows() - 1);
+	// Notes stored past the track's end are kept
+	for (int v = 0; v < voiceCount(track); v++)
+		for (int s = 0; s < length; s++)
+			removeNote(pattern, laneOf(track, v), s);
+	for (int s = 0; s < length; s++)
+		if (s * hits % length < hits)
+			placeNote(pattern, laneOf(track, 0), s, row, 1);
 }
 
 
@@ -210,6 +235,7 @@ void GridSequencer::copyPattern() {
 	std::memcpy(clipboard.patternLengths, lengths[viewPattern()], sizeof(clipboard.patternLengths));
 	std::memcpy(clipboard.patternTies, ties[viewPattern()], sizeof(clipboard.patternTies));
 	std::memcpy(clipboard.patternMods, mods[viewPattern()], sizeof(clipboard.patternMods));
+	std::memcpy(clipboard.patternProbs, probs[viewPattern()], sizeof(clipboard.patternProbs));
 	std::memcpy(clipboard.patternStepMods, stepMods[viewPattern()], sizeof(clipboard.patternStepMods));
 	std::memcpy(clipboard.patternTrackLengths, trackLengths[viewPattern()], sizeof(clipboard.patternTrackLengths));
 	clipboard.hasPattern = true;
@@ -223,6 +249,7 @@ void GridSequencer::pastePattern() {
 	std::memcpy(lengths[viewPattern()], clipboard.patternLengths, sizeof(clipboard.patternLengths));
 	std::memcpy(ties[viewPattern()], clipboard.patternTies, sizeof(clipboard.patternTies));
 	std::memcpy(mods[viewPattern()], clipboard.patternMods, sizeof(clipboard.patternMods));
+	std::memcpy(probs[viewPattern()], clipboard.patternProbs, sizeof(clipboard.patternProbs));
 	std::memcpy(stepMods[viewPattern()], clipboard.patternStepMods, sizeof(clipboard.patternStepMods));
 	std::memcpy(trackLengths[viewPattern()], clipboard.patternTrackLengths, sizeof(clipboard.patternTrackLengths));
 }
@@ -245,6 +272,7 @@ void GridSequencer::copyTrack() {
 		std::memcpy(clipboard.trackLengths[v], lengths[p][l], sizeof(clipboard.trackLengths[v]));
 		std::memcpy(clipboard.trackTies[v], ties[p][l], sizeof(clipboard.trackTies[v]));
 		std::memcpy(clipboard.trackMods[v], mods[p][l], sizeof(clipboard.trackMods[v]));
+		std::memcpy(clipboard.trackProbs[v], probs[p][l], sizeof(clipboard.trackProbs[v]));
 	}
 	std::memcpy(clipboard.trackStepMods, stepMods[p][t], sizeof(clipboard.trackStepMods));
 	clipboard.trackLength = trackLengths[p][t];
@@ -265,6 +293,7 @@ void GridSequencer::pasteTrack() {
 			std::memcpy(lengths[p][l], clipboard.trackLengths[v], sizeof(lengths[p][l]));
 			std::memcpy(ties[p][l], clipboard.trackTies[v], sizeof(ties[p][l]));
 			std::memcpy(mods[p][l], clipboard.trackMods[v], sizeof(mods[p][l]));
+			std::memcpy(probs[p][l], clipboard.trackProbs[v], sizeof(probs[p][l]));
 		}
 		else {
 			clearLane(p, l);
@@ -288,6 +317,7 @@ void GridSequencer::savePattern(int pattern, PatternSnapshot& snap) {
 	std::memcpy(snap.lengths, lengths[pattern], sizeof(snap.lengths));
 	std::memcpy(snap.ties, ties[pattern], sizeof(snap.ties));
 	std::memcpy(snap.mods, mods[pattern], sizeof(snap.mods));
+	std::memcpy(snap.probs, probs[pattern], sizeof(snap.probs));
 	std::memcpy(snap.stepMods, stepMods[pattern], sizeof(snap.stepMods));
 	std::memcpy(snap.trackLengths, trackLengths[pattern], sizeof(snap.trackLengths));
 }
@@ -298,6 +328,7 @@ void GridSequencer::loadPattern(int pattern, const PatternSnapshot& snap) {
 	std::memcpy(lengths[pattern], snap.lengths, sizeof(snap.lengths));
 	std::memcpy(ties[pattern], snap.ties, sizeof(snap.ties));
 	std::memcpy(mods[pattern], snap.mods, sizeof(snap.mods));
+	std::memcpy(probs[pattern], snap.probs, sizeof(snap.probs));
 	std::memcpy(stepMods[pattern], snap.stepMods, sizeof(snap.stepMods));
 	std::memcpy(trackLengths[pattern], snap.trackLengths, sizeof(snap.trackLengths));
 }

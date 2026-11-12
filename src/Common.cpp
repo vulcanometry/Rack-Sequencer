@@ -36,3 +36,14 @@ const std::vector<ModRange> MOD_RANGES = {
 	{"0 to 5 V", 0.f, 5.f},
 	{"-5 to +5 V", -5.f, 5.f},
 };
+
+const std::vector<ClockRate> CLOCK_RATES = {
+	{"/8", 8, 1},
+	{"/4", 4, 1},
+	{"/3", 3, 1},
+	{"/2", 2, 1},
+	{"x1", 1, 1},
+	{"x2", 1, 2},
+	{"x3", 1, 3},
+	{"x4", 1, 4},
+};
