@@ -98,7 +98,7 @@ void ScrollerDisplay::drawLayer(const DrawArgs& args, int layer) {
 
 		// Playhead of the edited track
 		int playStep = module->trackStep[track];
-		if (module->step >= 0 && playStep >= 0 && module->playingPattern == pattern)
+		if (module->step >= 0 && playStep >= 0 && module->trackPattern(track) == pattern)
 			fillRect(vg, lw + playStep * sw, 0, std::max(sw, 1.5f), h, nvgRGBA(0xff, 0xff, 0xff, 0x80));
 	}
 

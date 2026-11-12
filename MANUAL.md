@@ -231,7 +231,7 @@ Each of the 8 track rows on the right has:
 | Control | Use |
 |---|---|
 | **Number** | Track number, in the track's colour. |
-| **TRACK** button | Selects the track for editing in the grid. The selected track's button lights brightly; the others glow faintly in their colours. |
+| **TRACK** button | Selects the track for editing in the grid. The selected track's button lights brightly; the others glow faintly in their colours. **Shift+click** also makes the track loop its pattern while the song moves on; see [Looping a track through the song](#looping-a-track-through-the-song). |
 | **MUTE** button | Toggles mute (red light). A muted track sends no gates, but its CV still follows its notes. Its notes are drawn faded in the grid. |
 | **GATE** output | 10 V while a note sounds, 0 V otherwise. |
 | **CV** output | Pitch at **1 V/octave**, with C4 = 0 V. The CV **holds the last note's pitch** between notes, so releases and glides sound right. |
@@ -421,6 +421,26 @@ A song can have up to **128 slots**, and a pattern can appear in any number of t
 - **While a song is running**, the grid **follows playback**: it shows the pattern now playing and switches as the song moves on. The info bar shows the playing pattern (e.g. `P05`) in green. Edits you make go to the pattern that is playing, so you can change it live.
 - **When you stop a song**, SEQ turns to the pattern that was playing, so the grid keeps showing it.
 - **While stopped**, the grid shows the **SEQ pattern**, so you can browse and edit any pattern. Click a slot (or use **EDIT**) to jump SEQ to that slot's pattern.
+- **A looping track** (below) always shows the pattern it loops, since that is what it plays.
+
+### Looping a track through the song
+
+A track can keep looping one pattern while the rest of the song moves on. For example, the drums can repeat P03 the whole way through while the bass and lead change with each slot.
+
+**To loop a track:** **Shift+click** its **TRACK** button, or select it and right-click → **Loop this track's pattern while the song moves on**. The track is **pinned** to the pattern it is playing at that moment: the playing pattern while a song runs, otherwise the SEQ pattern. A tab under the track number shows the pattern it loops, for example `P03`. (On a poly track, the tab takes the place of the `x3` voice count.)
+
+**While it loops:**
+- The track plays its pinned pattern over and over, whatever pattern the song is on. Its loop **runs on through pattern changes** and only starts again from step 1 when playback is reset (**RESET**, or the end of a play-once song). A 6-step loop against 16-step patterns drifts against them, as in a polymeter.
+- **It doesn't set how long the song's patterns last.** Each pattern lasts as long as its own longest track with notes, leaving out looping tracks. So looping a long track doesn't stretch every slot.
+- A note held across a pattern change keeps sounding instead of being cut off.
+- Per-step MOD glides from step to step within the track's own loop.
+- **EOP** still marks the end of each of the song's patterns.
+- The grid shows the pinned pattern when the track is selected, so you see and edit what you hear. Edits go to that pattern.
+- Muting, poly voices and sending voices to their own mono jacks work as usual.
+
+**To stop looping:** Shift+click the TRACK button again, or untick the menu item. The track then **rejoins the song at the start of the next pattern**, so it comes back in time. Until then the tab blinks. While stopped, it rejoins straight away. Shift+click again while the tab blinks to keep it looping.
+
+Looping works in pattern mode too: the looping track carries on with its pattern while SEQ changes the others. Starting and stopping a loop can be undone with **Ctrl+Z**.
 
 ### Building a song
 
@@ -569,6 +589,7 @@ Right-click the module panel (not the grid's squares) to open the menu.
 | Pattern | Copy pattern / Paste pattern / Clear pattern | Same as the PATTERN buttons ([§13](#13-copy-paste-and-clear)). |
 | Track N | Poly voices (notes at once) | 1 (mono) to 8. More than 1 makes it a poly track that can play chords; see [Poly tracks](#poly-tracks). |
 | Track N | Also send each voice to its own mono jacks | Poly tracks only: voice 2 also comes out on the next track's jacks, voice 3 on the one after, and so on, for separate mono modules. Those tracks' own notes don't play meanwhile. |
+| Track N | Loop this track's pattern while the song moves on | Pins the track to the pattern it is playing, so it loops that while the song changes the others (same as Shift+click on its TRACK button). The pinned pattern shows on the right. Untick to rejoin the song at the next pattern; see [Looping a track through the song](#looping-a-track-through-the-song). |
 | Track N | Copy track / Paste track / Clear track | Same as the TRACK buttons. On a poly track they act on every voice. |
 | Track N | Set every track in this pattern to N steps | Copies the selected track's length to all 8 tracks of the pattern. |
 | Track N | Transpose track up / down one degree | Moves every note of the selected track one scale step up or down (same as Alt+wheel over the grid). Does nothing if a note would leave the grid. |
@@ -597,6 +618,7 @@ The song strip has its own right-click menu for individual slots ([§12](#12-son
 Everything is stored in the patch file and in Rack's autosave:
 - All 64 patterns: notes, note lengths, ties, MOD values and track lengths.
 - Each track's voice count (poly tracks) and whether it sends its voices to their own mono jacks.
+- Which tracks loop a pinned pattern, and which pattern each one loops.
 - Each track's MOD mode, MOD output range and the MOD value new notes get, and every pattern's step MOD values.
 - The song, its name and its cursor.
 - Track mutes and the selected track.

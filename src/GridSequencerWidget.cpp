@@ -191,15 +191,15 @@ struct GridSequencerWidget : ModuleWidget {
 		addChild(brackets);
 		for (int t = 0; t < NUM_TRACKS; t++) {
 			float y = 19.f + t * 13.f;
-			// Number, nudged up to leave room for a poly track's voice count below it
+			// Number, nudged up to leave room for the badge below it (loop pattern or voice count)
 			addLabel(Vec(numX, y - 1.6f), string::f("%d", t + 1), 12.f, TRACK_COLORS[t]);
-			VoiceCountLabel* voiceLabel = createWidget<VoiceCountLabel>(mm2px(Vec(numX - 2.6f, y + 1.4f)));
-			voiceLabel->box.size = mm2px(Vec(5.2f, 3.6f));
-			voiceLabel->module = module;
-			voiceLabel->track = t;
-			addChild(voiceLabel);
+			TrackBadge* badge = createWidget<TrackBadge>(mm2px(Vec(numX - 2.6f, y + 1.4f)));
+			badge->box.size = mm2px(Vec(5.2f, 3.6f));
+			badge->module = module;
+			badge->track = t;
+			addChild(badge);
 
-			auto* select = createLightParamCentered<VCVLightBezel<WhiteLight>>(mm2px(Vec(selectX, y)), module, GridSequencer::TRACK_PARAM + t, GridSequencer::TRACK_LIGHT + t);
+			auto* select = createLightParamCentered<TrackButton>(mm2px(Vec(selectX, y)), module, GridSequencer::TRACK_PARAM + t, GridSequencer::TRACK_LIGHT + t);
 			select->getLight()->baseColors[0] = TRACK_COLORS[t];
 			addParam(select);
 			addParam(createLightParamCentered<VCVLightBezel<RedLight>>(mm2px(Vec(muteX, y)), module, GridSequencer::MUTE_PARAM + t, GridSequencer::MUTE_LIGHT + t));
@@ -387,6 +387,19 @@ struct GridSequencerWidget : ModuleWidget {
 				},
 				last <= track));
 		}
+		// Right: the pattern it loops, or would loop if pinned now
+		std::string loopText = "Shift+click TRACK";
+		if (module->pinPattern[track] >= 0)
+			loopText = string::f("P%02d", module->pinPattern[track] + 1);
+		else if (module->looping(track))
+			loopText = "stops at next pattern";
+		menu->addChild(createBoolMenuItem("Loop this track's pattern while the song moves on", loopText,
+			[=]() { return module->pinPattern[track] >= 0; },
+			[=](bool loop) {
+				trackSettingsEdit(module, loop ? "loop track" : "stop looping track", [=]() {
+					module->togglePin(track);
+				});
+			}));
 		menu->addChild(createMenuItem("Copy track", "", [=]() {
 			module->copyTrack();
 		}));

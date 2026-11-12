@@ -187,7 +187,7 @@ void ModDisplay::drawLayer(const DrawArgs& args, int layer) {
 
 	// Playhead of the edited track
 	int playStep = module->trackStep[track];
-	if (module->step >= 0 && playStep >= viewStart && playStep < viewStart + VIEW_STEPS && module->playingPattern == pattern)
+	if (module->step >= 0 && playStep >= viewStart && playStep < viewStart + VIEW_STEPS && module->trackPattern(track) == pattern)
 		fillRect(vg, lw + (playStep - viewStart) * cw, 0, cw, h, nvgRGBA(0xff, 0xff, 0xff, 0x22));
 
 	NVGcolor c = trackColor;

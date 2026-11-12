@@ -48,8 +48,10 @@ json_t* GridSequencer::dataToJson() {
 	json_t* modSmoothJ = json_array();
 	json_t* voicesJ = json_array();
 	json_t* spreadJ = json_array();
+	json_t* pinsJ = json_array();
 	for (int t = 0; t < NUM_TRACKS; t++) {
 		json_array_append_new(spreadJ, json_boolean(spreadVoices[t]));
+		json_array_append_new(pinsJ, json_integer(pinPattern[t]));
 		json_array_append_new(modRangesJ, json_integer(modRange[t]));
 		json_array_append_new(modDefaultsJ, json_integer(modDefault[t]));
 		json_array_append_new(modModesJ, json_integer(modMode[t]));
@@ -62,6 +64,8 @@ json_t* GridSequencer::dataToJson() {
 	json_object_set_new(rootJ, "modSmooth", modSmoothJ);
 	json_object_set_new(rootJ, "trackVoices", voicesJ);
 	json_object_set_new(rootJ, "spreadVoices", spreadJ);
+	// Pattern each looping track is pinned to (-1 = follows the song)
+	json_object_set_new(rootJ, "pinnedPatterns", pinsJ);
 
 	// Per-step MOD values: 2-digit hex per step, up to the last one that isn't the default
 	json_t* stepModsJ = json_array();
@@ -261,6 +265,8 @@ void GridSequencer::dataFromJson(json_t* rootJ) {
 		modMode[t] = (modeJ && json_integer_value(modeJ) == MOD_PER_STEP) ? MOD_PER_STEP : MOD_PER_NOTE;
 		json_t* smoothJ = json_array_get(json_object_get(rootJ, "modSmooth"), t);
 		modSmooth[t] = !smoothJ || json_boolean_value(smoothJ);
+		json_t* pinJ = json_array_get(json_object_get(rootJ, "pinnedPatterns"), t);
+		pinPattern[t] = pinJ ? clamp((int) json_integer_value(pinJ), -1, NUM_PATTERNS - 1) : -1;
 	}
 	std::memset(stepMods, DEFAULT_STEP_MOD, sizeof(stepMods));
 	for (int p = 0; p < NUM_PATTERNS; p++)

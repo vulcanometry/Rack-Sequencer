@@ -125,6 +125,9 @@ struct GridSequencer : Module {
 	// voices. A track whose jacks are taken like that doesn't play its own notes.
 	int ownerTrack[NUM_TRACKS];
 	int ownerVoice[NUM_TRACKS];
+	// Pattern each track is pinned to (-1 = follows the song). A pinned track loops that
+	// pattern's notes while the song moves on around it.
+	int pinPattern[NUM_TRACKS];
 	int8_t song[MAX_SONG_LENGTH];
 	// Slots in the song; 0 = empty (a new module's song is empty until patterns are added)
 	int songLength = 0;
@@ -145,6 +148,12 @@ struct GridSequencer : Module {
 	// Step within the pattern (0 .. patternLength-1); each track plays step % its own length
 	int step = -1;
 	int trackStep[NUM_TRACKS];
+	// Pattern each track is looping right now (-1 = none). Follows pinPattern, except that a
+	// track let go of carries on looping until the next pattern starts, then rejoins the song.
+	int loopPattern[NUM_TRACKS];
+	// Step a looping track is on within its loop: it counts on through pattern changes, and only
+	// starts again from step 1 when playback is reset
+	int loopStep[NUM_TRACKS];
 	int songPos = 0;
 	int playingPattern = 0;
 	double phase = 1.0;
@@ -258,6 +267,7 @@ struct GridSequencer : Module {
 		bool spreadVoices[NUM_TRACKS];
 		int modMode[NUM_TRACKS];
 		int modRange[NUM_TRACKS];
+		int pinPattern[NUM_TRACKS];
 		bool modSmooth[NUM_TRACKS];
 	};
 	void saveSettings(TrackSettings& t);
@@ -278,6 +288,23 @@ struct GridSequencer : Module {
 	 */
 	void routeOutputs();
 
+	/** True while `track` loops a pinned pattern instead of following the song. */
+	bool looping(int track) {
+		return loopPattern[track] >= 0;
+	}
+	/** Pattern whose notes `track` is playing. */
+	int trackPattern(int track) {
+		return looping(track) ? loopPattern[track] : playingPattern;
+	}
+	/**
+	 * Pins `track` to the pattern it is playing (the one the grid shows for the song), so it
+	 * loops that while the song moves on; or lets it go again, to rejoin the song when the next
+	 * pattern starts.
+	 */
+	void togglePin(int track);
+	/** Brings loopPattern up to date with pinPattern; at a pattern boundary, tracks let go of rejoin the song. */
+	void syncLoops(bool boundary);
+
 	bool modView() {
 		return params[MOD_VIEW_PARAM].getValue() > 0.5f;
 	}
@@ -290,8 +317,10 @@ struct GridSequencer : Module {
 	bool following() {
 		return playingSong() && running;
 	}
-	/** Pattern shown and edited in the grid. */
+	/** Pattern shown and edited in the grid: a looping track's own pattern, as that is what it plays. */
 	int viewPattern() {
+		if (looping(selectedTrack))
+			return loopPattern[selectedTrack];
 		return following() ? playingPattern : editPattern();
 	}
 

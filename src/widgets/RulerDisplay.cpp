@@ -83,7 +83,7 @@ void RulerDisplay::drawLayer(const DrawArgs& args, int layer) {
 	}
 
 	// Playhead of the edited track
-	if (module && module->step >= 0 && module->playingPattern == pattern) {
+	if (module && module->step >= 0 && module->trackPattern(track) == pattern) {
 		int playStep = module->trackStep[track];
 		if (playStep >= pageStart && playStep < pageStart + VIEW_STEPS)
 			fillRect(vg, lw + (playStep - pageStart) * cw + 0.5f, h - 2.f, cw - 1.f, 2.f, trackColor);
