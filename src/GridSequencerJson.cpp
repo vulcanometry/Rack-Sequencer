@@ -41,6 +41,10 @@ json_t* GridSequencer::dataToJson() {
 	json_object_set_new(rootJ, "viewStart", json_integer(viewStart));
 	json_object_set_new(rootJ, "followPlayback", json_boolean(followPlayhead));
 	json_object_set_new(rootJ, "songName", json_string(songName.c_str()));
+	json_t* trackNamesJ = json_array();
+	for (int t = 0; t < NUM_TRACKS; t++)
+		json_array_append_new(trackNamesJ, json_string(trackNames[t].c_str()));
+	json_object_set_new(rootJ, "trackNames", trackNamesJ);
 
 	json_t* modRangesJ = json_array();
 	json_t* modDefaultsJ = json_array();
@@ -210,6 +214,10 @@ void GridSequencer::dataFromJson(json_t* rootJ) {
 	}
 	json_t* songNameJ = json_object_get(rootJ, "songName");
 	songName = (songNameJ && json_is_string(songNameJ)) ? json_string_value(songNameJ) : "";
+	for (int t = 0; t < NUM_TRACKS; t++) {
+		json_t* j = json_array_get(json_object_get(rootJ, "trackNames"), t);
+		trackNames[t] = (j && json_is_string(j)) ? json_string_value(j) : "";
+	}
 	if (json_t* j = json_object_get(rootJ, "songCursor"))
 		songCursor = clamp((int) json_integer_value(j), 0, std::max(songLength - 1, 0));
 

@@ -102,11 +102,12 @@ Values **wrap around** at the ends: B steps on to C, the last scale steps on to 
 
 ## 4. The info bar
 
-The strip at the top of the display has the song name in its left half and where playback is in its right half:
+The strip at the top of the display has the song name and the selected track's name in its left half, and where playback is in its right half:
 
 | Item | Example | Meaning |
 |---|---|---|
 | Song name (left half) | `Night Drive` | The song's name. **Click it to rename the song**: a box opens with the name selected; type the new name and press Enter (or click elsewhere). A song that hasn't been named shows a grey `Untitled`. The name is saved with the patch and used as the file name when you save the song ([§12](#naming-saving-and-loading-songs)). |
+| Track name (after the song name) | `Night Drive · Bass` | The **selected track's** name, in its colour. It changes whenever you select another track. **Click it to rename the track**, just as for the song. A track that hasn't been named shows a dimmed `Track 3`. |
 | Transport | `STOP`, `LOOP`, `SONG 03/12`, `ONCE 03/12` | `STOP` = stopped (red). `LOOP` = running in pattern mode. `SONG` = running a looping song, at slot 3 of 12; `ONCE` = a play-once song. |
 | Playing pattern | `P05` | The pattern that is playing (or will play when you press RUN). **Green** while a song is running: the grid then follows it, and it can differ from SEQ (see [§12](#12-song-mode)). |
 | Bar and beat | `BAR 2.3` | Where playback is within the pattern: bar 2, beat 3 (4 steps per beat, 16 per bar). `BAR -.-` while stopped. |
@@ -472,7 +473,7 @@ Songs are saved as Rack module presets (`.vcvm`) in the module's user preset fol
 - **Pitch:** the scale becomes **Chromatic** with root **C**, so every note fits exactly; MIDI note 60 (C4) is 0 V. Notes outside the grid's 8 octaves (MIDI 12–107) are left out.
 - **Velocity** becomes each note's MOD value (127 = 100%).
 - **Patterns and song:** the piece is cut into 4-bar (64-step) patterns, starting at pattern 1; identical sections share one pattern. The song plays them in order, MODE is set to song (loop), and the sequencer is left stopped. A note that runs on into the next pattern is split there and tied, so it keeps sounding.
-- The song is named after the file.
+- The song is named after the file, and each track after the MIDI track and channel its notes came from (for example `Bass (ch 2)`).
 
 If something doesn't fit — more than 8 parts, more than 8 notes at once in a part, notes out of range, or a piece needing more than 64 different patterns or 128 song slots — the import goes ahead and a message lists what was left out. **Ctrl+Z** undoes the whole import.
 
@@ -587,6 +588,7 @@ Right-click the module panel (not the grid's squares) to open the menu.
 | Section | Item | Action |
 |---|---|---|
 | Pattern | Copy pattern / Paste pattern / Clear pattern | Same as the PATTERN buttons ([§13](#13-copy-paste-and-clear)). |
+| Track N | Track name | Text box: the selected track's name, shown in the info bar after the song name while the track is selected. |
 | Track N | Poly voices (notes at once) | 1 (mono) to 8. More than 1 makes it a poly track that can play chords; see [Poly tracks](#poly-tracks). |
 | Track N | Also send each voice to its own mono jacks | Poly tracks only: voice 2 also comes out on the next track's jacks, voice 3 on the one after, and so on, for separate mono modules. Those tracks' own notes don't play meanwhile. |
 | Track N | Loop this track's pattern while the song moves on | Pins the track to the pattern it is playing, so it loops that while the song changes the others (same as Shift+click on its TRACK button). The pinned pattern shows on the right. Untick to rejoin the song at the next pattern; see [Looping a track through the song](#looping-a-track-through-the-song). |
@@ -621,6 +623,7 @@ Everything is stored in the patch file and in Rack's autosave:
 - Which tracks loop a pinned pattern, and which pattern each one loops.
 - Each track's MOD mode, MOD output range and the MOD value new notes get, and every pattern's step MOD values.
 - The song, its name and its cursor.
+- Each track's name.
 - Track mutes and the selected track.
 - Run state.
 - Grid scroll position (pitch and steps).

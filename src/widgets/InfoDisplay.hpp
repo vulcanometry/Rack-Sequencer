@@ -2,18 +2,24 @@
 #include "../GridSequencer.hpp"
 
 
-/** Song name text box, in the right-click menu and the rename popup. Enter or Escape closes it. */
-struct SongNameField : ui::TextField {
+/**
+ * Text box for the song's name or a track's, in the right-click menu and the rename popups.
+ * Enter or Escape closes it.
+ */
+struct NameField : ui::TextField {
 	// Looked up by id, not held as a pointer: the module can be deleted while the box is open
 	// (Delete in the same context menu), and the box is only destroyed afterwards
 	int64_t moduleId = -1;
+	// The track whose name this edits; -1 = the song's
+	int track = -1;
 	// Name when the box opened; closing it records the rename as one undo step
 	std::string oldName;
 
-	void start(GridSequencer* m) {
+	void start(GridSequencer* m, int t = -1) {
 		moduleId = m->id;
-		oldName = m->songName;
-		setText(m->songName);
+		track = t;
+		oldName = m->nameOf(track);
+		setText(oldName);
 	}
 
 	GridSequencer* getModule() {
@@ -22,11 +28,11 @@ struct SongNameField : ui::TextField {
 		return dynamic_cast<GridSequencer*>(APP->engine->getModule(moduleId));
 	}
 
-	~SongNameField();
+	~NameField();
 
 	void onChange(const ChangeEvent& e) override {
 		if (GridSequencer* module = getModule())
-			module->songName = text;
+			module->nameOf(track) = text;
 		ui::TextField::onChange(e);
 	}
 
@@ -35,13 +41,19 @@ struct SongNameField : ui::TextField {
 
 
 /**
- * Top line of the display. Left half: the song's name (click it to rename). Right half: where
- * playback is: transport (and song slot), the playing pattern, and the bar and beat in it.
+ * Top line of the display. Left half: the song's name, then the selected track's (click either to
+ * rename it). Right half: where playback is: transport (and song slot), the playing pattern, and
+ * the bar and beat in it.
  */
 struct InfoDisplay : Widget {
 	GridSequencer* module = nullptr;
-	// Right edge of the name as last drawn: clicks left of it rename the song
+	// Right edge of the song name as last drawn, and where the track name starts and ends:
+	// clicks there rename the song or the track
 	float nameEnd = 0.f;
+	float trackNameStart = 0.f, trackNameEnd = 0.f;
+
+	/** Opens a popup with a text box for the song's name (track -1) or a track's. */
+	void openNameEditor(int track);
 
 	void onButton(const ButtonEvent& e) override;
 

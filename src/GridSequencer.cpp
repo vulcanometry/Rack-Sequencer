@@ -152,6 +152,7 @@ void GridSequencer::clearAll() {
 		voices[t] = 1;
 		spreadVoices[t] = false;
 		pinPattern[t] = -1;
+		trackNames[t].clear();
 		muted[t] = false;
 	}
 	songLength = 0;
