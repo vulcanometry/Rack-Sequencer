@@ -35,17 +35,18 @@ void trackSettingsEdit(GridSequencer* m, const std::string& name, F f) {
 	APP->history->push(h);
 }
 
-/** Undo / redo of renaming the song. */
-struct SongNameAction : history::ModuleAction {
+/** Undo / redo of renaming the song (track -1) or a track. */
+struct NameAction : history::ModuleAction {
+	int track = -1;
 	std::string before, after;
 
 	void undo() override {
 		if (GridSequencer* m = dynamic_cast<GridSequencer*>(APP->engine->getModule(moduleId)))
-			m->songName = before;
+			m->nameOf(track) = before;
 	}
 	void redo() override {
 		if (GridSequencer* m = dynamic_cast<GridSequencer*>(APP->engine->getModule(moduleId)))
-			m->songName = after;
+			m->nameOf(track) = after;
 	}
 };
 

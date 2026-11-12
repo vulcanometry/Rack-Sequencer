@@ -134,6 +134,8 @@ struct GridSequencer : Module {
 	// Shown in the info bar and used as the file name when saving the song; "" = not named yet
 	// (shown as "Untitled")
 	std::string songName;
+	// Each track's name, shown in the info bar while it is selected; "" = not named (shown as "Track N")
+	std::string trackNames[NUM_TRACKS];
 	int songCursor = 0;
 	// A new module starts stopped
 	bool running = false;
@@ -245,6 +247,13 @@ struct GridSequencer : Module {
 	}
 	std::string displayName() {
 		return songName.empty() ? "Untitled" : songName;
+	}
+	std::string trackDisplayName(int track) {
+		return trackNames[track].empty() ? string::f("Track %d", track + 1) : trackNames[track];
+	}
+	/** The song's name (track -1) or a track's, for the name fields and their undo. */
+	std::string& nameOf(int track) {
+		return track < 0 ? songName : trackNames[track];
 	}
 	/** Song mode with a song to play; with an empty song, song mode plays the SEQ pattern. */
 	bool playingSong() {

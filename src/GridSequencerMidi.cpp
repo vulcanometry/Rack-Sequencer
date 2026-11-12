@@ -128,6 +128,8 @@ std::string GridSequencer::importMidi(const MidiFileData& midi, const std::strin
 		modRange[t] = 0;
 		modDefault[t] = DEFAULT_MOD;
 		pinPattern[t] = -1;
+		// Named after the MIDI track and channel its notes came from
+		trackNames[t] = (t < (int) used.size()) ? midi.parts[used[t]] : "";
 		muted[t] = false;
 	}
 	selectedTrack = 0;

@@ -3,20 +3,21 @@
 #include "../History.hpp"
 
 
-SongNameField::~SongNameField() {
+NameField::~NameField() {
 	GridSequencer* module = getModule();
-	if (module && module->songName != oldName && APP->history) {
-		SongNameAction* h = new SongNameAction;
+	if (module && module->nameOf(track) != oldName && APP->history) {
+		NameAction* h = new NameAction;
 		h->moduleId = module->id;
-		h->name = "rename song";
+		h->name = (track < 0) ? "rename song" : "rename track";
+		h->track = track;
 		h->before = oldName;
-		h->after = module->songName;
+		h->after = module->nameOf(track);
 		APP->history->push(h);
 	}
 }
 
 
-void SongNameField::onSelectKey(const SelectKeyEvent& e) {
+void NameField::onSelectKey(const SelectKeyEvent& e) {
 	if (e.action == GLFW_PRESS && (e.key == GLFW_KEY_ENTER || e.key == GLFW_KEY_KP_ENTER || e.key == GLFW_KEY_ESCAPE)) {
 		if (ui::MenuOverlay* overlay = getAncestorOfType<ui::MenuOverlay>())
 			overlay->requestDelete();
@@ -27,19 +28,32 @@ void SongNameField::onSelectKey(const SelectKeyEvent& e) {
 }
 
 
+void InfoDisplay::openNameEditor(int track) {
+	ui::Menu* menu = createMenu();
+	menu->addChild(createMenuLabel(track < 0 ? "Song name" : string::f("Track %d name", track + 1)));
+	NameField* field = new NameField;
+	field->box.size.x = 260.f;
+	field->placeholder = (track < 0) ? "Untitled" : string::f("Track %d", track + 1);
+	field->start(module, track);
+	menu->addChild(field);
+	APP->event->setSelectedWidget(field);
+	field->selectAll();
+}
+
+
 void InfoDisplay::onButton(const ButtonEvent& e) {
-	if (module && e.action == GLFW_PRESS && e.button == GLFW_MOUSE_BUTTON_LEFT && e.pos.x < nameEnd + 8.f) {
-		ui::Menu* menu = createMenu();
-		menu->addChild(createMenuLabel("Song name"));
-		SongNameField* field = new SongNameField;
-		field->box.size.x = 260.f;
-		field->placeholder = "Untitled";
-		field->start(module);
-		menu->addChild(field);
-		APP->event->setSelectedWidget(field);
-		field->selectAll();
-		e.consume(this);
-		return;
+	if (module && e.action == GLFW_PRESS && e.button == GLFW_MOUSE_BUTTON_LEFT) {
+		// The track name's area reaches back to the separator, so the two never overlap
+		int track = -2;
+		if (e.pos.x < nameEnd + 4.f)
+			track = -1;
+		else if (e.pos.x < trackNameEnd + 8.f)
+			track = module->selectedTrack;
+		if (track >= -1) {
+			openNameEditor(track);
+			e.consume(this);
+			return;
+		}
 	}
 	Widget::onButton(e);
 }
@@ -79,17 +93,35 @@ void InfoDisplay::drawLayer(const DrawArgs& args, int layer) {
 	nvgFillColor(vg, running ? nvgRGB(0x8c, 0xf0, 0x9c) : nvgRGB(0xff, 0x80, 0x70));
 	nvgText(vg, x, cy, (transport + "   ").c_str(), NULL);
 
-	// Left half: the song's name, shortened to fit
+	// Left half: the song's name, then the selected track's, each shortened to fit. The track's
+	// name gets up to 45% of the room, the song's the rest.
 	setFont(vg, LABEL_FONT);
 	nvgFontSize(vg, 15.f);
 	nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-	bool named = module && !module->songName.empty();
-	std::string name = module ? module->displayName() : "Untitled";
+	auto fit = [&](std::string s, float room) {
+		while (s.size() > 4 && nvgTextBounds(vg, 0, 0, s.c_str(), NULL, NULL) > room)
+			s = s.substr(0, s.size() - 4) + "...";
+		return s;
+	};
 	float room = box.size.x / 2 - 12.f;
-	while (name.size() > 4 && nvgTextBounds(vg, 0, 0, name.c_str(), NULL, NULL) > room)
-		name = name.substr(0, name.size() - 4) + "...";
+	int track = module ? module->selectedTrack : 0;
+	std::string trackName = fit(module ? module->trackDisplayName(track) : "Track 1", room * 0.45f);
+	const char* separator = "  \xc2\xb7  ";  // middle dot
+	float trackW = nvgTextBounds(vg, 0, 0, trackName.c_str(), NULL, NULL);
+	float separatorW = nvgTextBounds(vg, 0, 0, separator, NULL, NULL);
+
+	bool named = module && !module->songName.empty();
+	std::string name = fit(module ? module->displayName() : "Untitled", room - trackW - separatorW);
 	nvgFillColor(vg, named ? nvgRGB(0xf6, 0xe7, 0xb0) : nvgRGB(0x8a, 0x90, 0x9a));
 	nameEnd = nvgText(vg, 6.f, cy, name.c_str(), NULL);
+	nvgFillColor(vg, nvgRGB(0x5a, 0x60, 0x6a));
+	trackNameStart = nvgText(vg, nameEnd, cy, separator, NULL);
+	// In the track's colour; dimmed while it has no name of its own
+	NVGcolor trackColor = TRACK_COLORS[track];
+	if (!module || module->trackNames[track].empty())
+		trackColor.a = 0.55f;
+	nvgFillColor(vg, trackColor);
+	trackNameEnd = nvgText(vg, trackNameStart, cy, trackName.c_str(), NULL);
 }
 
 

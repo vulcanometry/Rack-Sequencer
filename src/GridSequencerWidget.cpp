@@ -365,6 +365,11 @@ struct GridSequencerWidget : ModuleWidget {
 			menu->addChild(createMenuLabel(string::f("Track %d (poly, %d voices)", track + 1, voices)));
 		else
 			menu->addChild(createMenuLabel(string::f("Track %d", track + 1)));
+		NameField* trackNameField = new NameField;
+		trackNameField->box.size.x = 220.f;
+		trackNameField->placeholder = "Track name";
+		trackNameField->start(module, track);
+		menu->addChild(trackNameField);
 		std::vector<std::string> voiceLabels;
 		for (int v = 1; v <= MAX_VOICES; v++)
 			voiceLabels.push_back(v == 1 ? "1 (mono)" : string::f("%d", v));
@@ -477,7 +482,7 @@ struct GridSequencerWidget : ModuleWidget {
 
 		menu->addChild(new MenuSeparator);
 		menu->addChild(createMenuLabel("Song"));
-		SongNameField* nameField = new SongNameField;
+		NameField* nameField = new NameField;
 		nameField->box.size.x = 220.f;
 		nameField->placeholder = "Song name";
 		nameField->start(module);
