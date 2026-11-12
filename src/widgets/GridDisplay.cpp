@@ -31,7 +31,7 @@ bool GridDisplay::placeMoved(int start, int row) {
 		if (track < 0)
 			return false;
 	}
-	module->placeNote(dragPattern, track, start, row, dragLength, dragTie, dragMod);
+	module->placeNote(dragPattern, track, start, row, dragLength, dragTie, dragMod, dragProb);
 	curTrack = track;
 	curStart = start;
 	curRow = row;
@@ -98,6 +98,7 @@ void GridDisplay::onButton(const ButtonEvent& e) {
 				dragLength = module->lengths[dragPattern][track][s];
 				dragTie = module->ties[dragPattern][track][s];
 				dragMod = module->mods[dragPattern][track][s];
+				dragProb = module->probs[dragPattern][track][s];
 				grabOffset = col - s;
 				// The right 40% of a note's last step is its stretch handle
 				float xInCell = e.pos.x - labelW() - (col - dragViewStart) * cellW();
@@ -114,7 +115,8 @@ void GridDisplay::onButton(const ButtonEvent& e) {
 					dragLength = 1;
 					dragTie = false;
 					dragMod = module->modDefault[dragLead];
-					module->placeNote(dragPattern, dragTrack, col, row, 1, false, dragMod);
+					dragProb = PROB_MAX;
+					module->placeNote(dragPattern, dragTrack, col, row, 1, false, dragMod, dragProb);
 				}
 			}
 			curTrack = dragTrack;
@@ -146,7 +148,7 @@ void GridDisplay::onDragMove(const DragMoveEvent& e) {
 			module->removeNote(dragPattern, dragTrack, dragStart);
 			length = std::min(length, module->freeLength(dragPattern, dragTrack, dragStart));
 		}
-		module->placeNote(dragPattern, dragTrack, dragStart, dragRow, length, dragTie, dragMod);
+		module->placeNote(dragPattern, dragTrack, dragStart, dragRow, length, dragTie, dragMod, dragProb);
 		if (dragMode == DRAG_RESIZE && poly())
 			shiftChord(row - dragRow);
 	}
@@ -327,6 +329,8 @@ void GridDisplay::drawLayer(const DrawArgs& args, int layer) {
 				c.a = 0.25f;  // kept, but past the track's end
 			else if (module->muted[track])
 				c.a = 0.5f;
+			// A note that doesn't always play is fainter, the less likely it is
+			c.a *= 0.4f + 0.6f * module->probs[pattern][voice][s] / (float) PROB_MAX;
 			float x = lw + a * cw;
 			if (visible(row)) {
 				float y = rowToY(row);

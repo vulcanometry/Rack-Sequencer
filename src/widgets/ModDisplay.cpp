@@ -15,10 +15,10 @@ int ModDisplay::setAt(int step, float value) {
 	int target = targetAt(dragPattern, dragLead, dragVoice, step);
 	if (target < 0)
 		return -1;
-	int v = clamp((int) std::round(value), 0, MOD_MAX);
+	int v = clamp((int) std::round(value), 0, maxValue());
 	*valuePtr(dragPattern, dragLead, dragVoice, target) = v;
 	// New notes get the last note value set
-	if (!perStep(dragLead))
+	if (!prob && !perStep(dragLead))
 		module->modDefault[dragLead] = v;
 	return target;
 }
@@ -33,7 +33,7 @@ void ModDisplay::onButton(const ButtonEvent& e) {
 		dragging = false;
 		if (e.pos.x < labelW()) {
 			// Badge: switch the edited track's MOD mode
-			if (e.pos.y < badgeH() + 2.f) {
+			if (!prob && e.pos.y < badgeH() + 2.f) {
 				GridSequencer* m = module;
 				trackSettingsEdit(m, "change MOD mode", [=]() {
 					int& mode = m->modMode[m->selectedTrack];
@@ -81,7 +81,7 @@ void ModDisplay::onDragMove(const DragMoveEvent& e) {
 
 void ModDisplay::onDragEnd(const DragEndEvent& e) {
 	if (module && dragging)
-		module->recordPatternEdit("change MOD value", dragPattern, undoBefore);
+		module->recordPatternEdit(editName(), dragPattern, undoBefore);
 	dragging = false;
 	edited = -1;
 }
@@ -112,7 +112,7 @@ void ModDisplay::onHoverScroll(const HoverScrollEvent& e) {
 			int target = targetAt(dragPattern, dragLead, dragVoice, stepAt(e.pos.x, module->viewStart));
 			if (target >= 0) {
 				int delta = e.scrollDelta.y > 0.f ? 1 : -1;
-				module->patternEdit("change MOD value", dragPattern, [&]() {
+				module->patternEdit(editName(), dragPattern, [&]() {
 					setAt(target, *valuePtr(dragPattern, dragLead, dragVoice, target) + delta);
 				});
 			}
@@ -123,7 +123,7 @@ void ModDisplay::onHoverScroll(const HoverScrollEvent& e) {
 
 
 void ModDisplay::drawReadout(NVGcontext* vg, int track, int value, float x, float y, float w) {
-	std::string text = string::f("%d%% %.2gV", value, module->modVoltage(track, value));
+	std::string text = prob ? string::f("%d%%", value) : string::f("%d%% %.2gV", value, module->modVoltage(track, value));
 	nvgFontSize(vg, 11.f);
 	bool right = x > box.size.x - mm2px(20.f);
 	nvgTextAlign(vg, (right ? NVG_ALIGN_RIGHT : NVG_ALIGN_LEFT) | NVG_ALIGN_BOTTOM);
@@ -164,14 +164,16 @@ void ModDisplay::drawLayer(const DrawArgs& args, int layer) {
 	nvgFontSize(vg, 11.f);
 	nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
 	nvgFillColor(vg, trackColor);
-	nvgText(vg, lw / 2, 1.5f + badgeH() / 2, stepMode ? "STEP" : "NOTE", NULL);
+	nvgText(vg, lw / 2, 1.5f + badgeH() / 2, prob ? "PROB" : (stepMode ? "STEP" : "NOTE"), NULL);
 
 	nvgFontSize(vg, 10.5f);
 	for (int i = 0; i <= 4; i++) {
-		float y = valueY(MOD_MAX * i / 4.f);
+		float y = valueY(maxValue() * i / 4.f);
 		fillRect(vg, lw, y - 0.5f, box.size.x - lw, 1.f, nvgRGBA(0xff, 0xff, 0xff, i == 0 ? 0x30 : 0x14));
 		float volts = range.min + (range.max - range.min) * i / 4.f;
 		std::string label = (range.min < 0.f && volts > 0.f) ? string::f("+%gV", volts) : string::f("%gV", volts);
+		if (prob)
+			label = string::f("%d%%", PROB_MAX * i / 4);
 		nvgTextAlign(vg, NVG_ALIGN_CENTER | (i == 0 ? NVG_ALIGN_BOTTOM : NVG_ALIGN_MIDDLE));
 		nvgFillColor(vg, nvgRGB(0xc4, 0xc9, 0xd2));
 		nvgText(vg, lw / 2, y, label.c_str(), NULL);
@@ -243,7 +245,7 @@ void ModDisplay::drawLayer(const DrawArgs& args, int layer) {
 			NVGcolor nc = c;
 			if (s >= trackLen)
 				nc.a = 0.25f;
-			int value = module->mods[pattern][l][s];
+			int value = *valuePtr(pattern, track, v, s);
 			float y = valueY(value);
 			bool startInView = s >= viewStart;
 			float barX = lw + a * cw + 3.f + v * laneW;

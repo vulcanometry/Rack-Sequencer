@@ -53,7 +53,9 @@ json_t* GridSequencer::dataToJson() {
 	json_t* voicesJ = json_array();
 	json_t* spreadJ = json_array();
 	json_t* pinsJ = json_array();
+	json_t* ratesJ = json_array();
 	for (int t = 0; t < NUM_TRACKS; t++) {
+		json_array_append_new(ratesJ, json_string(rate(t).name));
 		json_array_append_new(spreadJ, json_boolean(spreadVoices[t]));
 		json_array_append_new(pinsJ, json_integer(pinPattern[t]));
 		json_array_append_new(modRangesJ, json_integer(modRange[t]));
@@ -70,6 +72,8 @@ json_t* GridSequencer::dataToJson() {
 	json_object_set_new(rootJ, "spreadVoices", spreadJ);
 	// Pattern each looping track is pinned to (-1 = follows the song)
 	json_object_set_new(rootJ, "pinnedPatterns", pinsJ);
+	// Each track's clock rate, by name ("x1", "/2", ...)
+	json_object_set_new(rootJ, "clockRates", ratesJ);
 
 	// Per-step MOD values: 2-digit hex per step, up to the last one that isn't the default
 	json_t* stepModsJ = json_array();
@@ -88,17 +92,21 @@ json_t* GridSequencer::dataToJson() {
 
 	// Each lane is stored as strings of 2-digit hex values per step, up to its last note:
 	// rows ("--" = off), note lengths, ties ("0"/"1" per step, up to the last tied note) and
-	// MOD values. A track's first voice goes in "patterns", "noteLengths", "noteTies" and
-	// "noteMods" ([pattern][track]); the other voices of poly tracks, where they have notes, in
-	// "voiceNotes" as {pattern, track, voice, notes, lengths, ties, mods}.
-	auto laneJson = [&](int p, int l, std::string* rows, std::string* lens, std::string* tieStr, std::string* modStr) {
-		int last = -1, lastTie = -1;
+	// MOD values, and probabilities (up to the last note that doesn't always play). A track's
+	// first voice goes in "patterns", "noteLengths", "noteTies", "noteMods" and "noteProbs"
+	// ([pattern][track]); the other voices of poly tracks, where they have notes, in
+	// "voiceNotes" as {pattern, track, voice, notes, lengths, ties, mods, probs}.
+	auto laneJson = [&](int p, int l, std::string* rows, std::string* lens, std::string* tieStr, std::string* modStr, std::string* probStr) {
+		int last = -1, lastTie = -1, lastProb = -1;
 		for (int i = 0; i < NUM_STEPS; i++) {
 			if (notes[p][l][i] >= 0)
 				last = i;
 			if (notes[p][l][i] >= 0 && ties[p][l][i])
 				lastTie = i;
+			if (notes[p][l][i] >= 0 && probs[p][l][i] < PROB_MAX)
+				lastProb = i;
 		}
+		*probStr = toHex(probs[p][l], lastProb + 1, PROB_MAX);
 		for (int i = 0; i <= last; i++) {
 			int8_t n = notes[p][l][i];
 			*rows += (n < 0) ? "--" : string::f("%02x", n);
@@ -113,6 +121,7 @@ json_t* GridSequencer::dataToJson() {
 	json_t* noteLengthsJ = json_array();
 	json_t* noteTiesJ = json_array();
 	json_t* noteModsJ = json_array();
+	json_t* noteProbsJ = json_array();
 	json_t* trackLengthsJ = json_array();
 	json_t* voiceNotesJ = json_array();
 	for (int p = 0; p < NUM_PATTERNS; p++) {
@@ -120,18 +129,20 @@ json_t* GridSequencer::dataToJson() {
 		json_t* tracksLenJ = json_array();
 		json_t* tracksTieJ = json_array();
 		json_t* tracksModJ = json_array();
+		json_t* tracksProbJ = json_array();
 		json_t* trackLenJ = json_array();
 		for (int t = 0; t < NUM_TRACKS; t++) {
-			std::string rows, lens, tieStr, modStr;
-			laneJson(p, laneOf(t, 0), &rows, &lens, &tieStr, &modStr);
+			std::string rows, lens, tieStr, modStr, probStr;
+			laneJson(p, laneOf(t, 0), &rows, &lens, &tieStr, &modStr, &probStr);
 			json_array_append_new(tracksJ, json_string(rows.c_str()));
 			json_array_append_new(tracksLenJ, json_string(lens.c_str()));
 			json_array_append_new(tracksTieJ, json_string(tieStr.c_str()));
 			json_array_append_new(tracksModJ, json_string(modStr.c_str()));
+			json_array_append_new(tracksProbJ, json_string(probStr.c_str()));
 			json_array_append_new(trackLenJ, json_integer(trackLength(p, t)));
 			for (int v = 1; v < MAX_VOICES; v++) {
-				std::string vRows, vLens, vTies, vMods;
-				if (!laneJson(p, laneOf(t, v), &vRows, &vLens, &vTies, &vMods))
+				std::string vRows, vLens, vTies, vMods, vProbs;
+				if (!laneJson(p, laneOf(t, v), &vRows, &vLens, &vTies, &vMods, &vProbs))
 					continue;
 				json_t* voiceJ = json_object();
 				json_object_set_new(voiceJ, "pattern", json_integer(p));
@@ -141,6 +152,8 @@ json_t* GridSequencer::dataToJson() {
 				json_object_set_new(voiceJ, "lengths", json_string(vLens.c_str()));
 				json_object_set_new(voiceJ, "ties", json_string(vTies.c_str()));
 				json_object_set_new(voiceJ, "mods", json_string(vMods.c_str()));
+				if (!vProbs.empty())
+					json_object_set_new(voiceJ, "probs", json_string(vProbs.c_str()));
 				json_array_append_new(voiceNotesJ, voiceJ);
 			}
 		}
@@ -148,19 +161,21 @@ json_t* GridSequencer::dataToJson() {
 		json_array_append_new(noteLengthsJ, tracksLenJ);
 		json_array_append_new(noteTiesJ, tracksTieJ);
 		json_array_append_new(noteModsJ, tracksModJ);
+		json_array_append_new(noteProbsJ, tracksProbJ);
 		json_array_append_new(trackLengthsJ, trackLenJ);
 	}
 	json_object_set_new(rootJ, "patterns", patternsJ);
 	json_object_set_new(rootJ, "noteLengths", noteLengthsJ);
 	json_object_set_new(rootJ, "noteTies", noteTiesJ);
 	json_object_set_new(rootJ, "noteMods", noteModsJ);
+	json_object_set_new(rootJ, "noteProbs", noteProbsJ);
 	json_object_set_new(rootJ, "voiceNotes", voiceNotesJ);
 	json_object_set_new(rootJ, "trackLengths", trackLengthsJ);
 	return rootJ;
 }
 
 
-void GridSequencer::laneFromStrings(int p, int l, const char* rows, const char* lens, const char* tieStr, const char* modStr) {
+void GridSequencer::laneFromStrings(int p, int l, const char* rows, const char* lens, const char* tieStr, const char* modStr, const char* probStr) {
 	if (rows) {
 		std::string s = rows;
 		for (int i = 0; i < NUM_STEPS && (size_t) (i * 2 + 1) < s.size(); i++) {
@@ -178,6 +193,8 @@ void GridSequencer::laneFromStrings(int p, int l, const char* rows, const char* 
 	}
 	if (modStr)
 		fromHex(modStr, mods[p][l], 0, MOD_MAX);
+	if (probStr)
+		fromHex(probStr, probs[p][l], 0, PROB_MAX);
 }
 
 
@@ -228,6 +245,7 @@ void GridSequencer::dataFromJson(json_t* rootJ) {
 	std::memset(lengths, 1, sizeof(lengths));
 	std::memset(ties, 0, sizeof(ties));
 	std::memset(mods, DEFAULT_MOD, sizeof(mods));
+	std::memset(probs, PROB_MAX, sizeof(probs));
 	auto trackString = [&](const char* key, int p, int t) -> const char* {
 		json_t* j = json_array_get(json_array_get(json_object_get(rootJ, key), p), t);
 		return (j && json_is_string(j)) ? json_string_value(j) : nullptr;
@@ -236,7 +254,7 @@ void GridSequencer::dataFromJson(json_t* rootJ) {
 		for (int t = 0; t < NUM_TRACKS; t++) {
 			int l = laneOf(t, 0);
 			laneFromStrings(p, l, trackString("patterns", p, t), trackString("noteLengths", p, t),
-				trackString("noteTies", p, t), trackString("noteMods", p, t));
+				trackString("noteTies", p, t), trackString("noteMods", p, t), trackString("noteProbs", p, t));
 			if (!json_object_get(rootJ, "noteLengths")) {
 				if (const char* old = trackString("lengths", p, t)) {
 					std::string s = old;
@@ -261,7 +279,7 @@ void GridSequencer::dataFromJson(json_t* rootJ) {
 			json_t* j = json_object_get(voiceJ, key);
 			return (j && json_is_string(j)) ? json_string_value(j) : nullptr;
 		};
-		laneFromStrings(p, laneOf(t, v), str("notes"), str("lengths"), str("ties"), str("mods"));
+		laneFromStrings(p, laneOf(t, v), str("notes"), str("lengths"), str("ties"), str("mods"), str("probs"));
 	}
 
 	for (int t = 0; t < NUM_TRACKS; t++) {
@@ -275,6 +293,11 @@ void GridSequencer::dataFromJson(json_t* rootJ) {
 		modSmooth[t] = !smoothJ || json_boolean_value(smoothJ);
 		json_t* pinJ = json_array_get(json_object_get(rootJ, "pinnedPatterns"), t);
 		pinPattern[t] = pinJ ? clamp((int) json_integer_value(pinJ), -1, NUM_PATTERNS - 1) : -1;
+		json_t* rateJ = json_array_get(json_object_get(rootJ, "clockRates"), t);
+		clockRate[t] = DEFAULT_CLOCK_RATE;
+		for (size_t i = 0; i < CLOCK_RATES.size(); i++)
+			if (rateJ && json_is_string(rateJ) && std::string(json_string_value(rateJ)) == CLOCK_RATES[i].name)
+				clockRate[t] = i;
 	}
 	std::memset(stepMods, DEFAULT_STEP_MOD, sizeof(stepMods));
 	for (int p = 0; p < NUM_PATTERNS; p++)
@@ -311,6 +334,7 @@ void GridSequencer::dataFromJson(json_t* rootJ) {
 					std::memcpy(lengths[p][to], lengths[p][from], sizeof(lengths[p][to]));
 					std::memcpy(ties[p][to], ties[p][from], sizeof(ties[p][to]));
 					std::memcpy(mods[p][to], mods[p][from], sizeof(mods[p][to]));
+					std::memcpy(probs[p][to], probs[p][from], sizeof(probs[p][to]));
 					clearLane(p, from);
 				}
 			}

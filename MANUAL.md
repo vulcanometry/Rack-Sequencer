@@ -69,7 +69,7 @@ From left to right:
 **Centre display**
 - **Info bar**: the song name (click to rename) at the top.
 - **Step ruler**: step numbers and the track's end marker.
-- **Note grid**: 16 steps × 15 visible pitch rows. The **MOD** button in the strip to its right switches it to the MOD view ([§7](#mod-values)).
+- **Note grid**: 16 steps × 15 visible pitch rows. The **MOD** and **PROB** buttons in the strip to its right switch it to the MOD view ([MOD values](#mod-values)) or the PROB view ([Note probability](#note-probability)).
 - **Horizontal scroller**: an overview of all 64 steps, for panning the grid.
 - **Song strip**: the song arrangement.
 
@@ -290,6 +290,29 @@ In NOTE mode, each note of the selected track is a bar in the track's colour, as
 - In the note view, a thin dark strip along the bottom of each note of the selected track shows its MOD value: the longer the strip, the higher the value (NOTE mode only).
 - TRACK and PATTERN **CLR** also reset the step values to 0%.
 
+### Note probability
+
+Every note has a **probability** from 0% to 100%: the chance that it plays each time its step comes round. At 100% (the default) it always plays; at 50% it plays about every other time, at random; at 0% it never plays. A note that sits a turn out sends no gate, and its pitch and MOD output keep the previous note's values.
+
+Press the **PROB** button (below MOD, in the strip right of the grid) to see and edit probabilities. The PROB view works just like the MOD view in NOTE mode: each note of the selected track is a bar as high as its probability; press or drag to set values, and use the wheel for 1% steps. On a poly track each voice has its own lane. MOD and PROB take turns: lighting one turns the other off.
+
+- New notes always start at 100%.
+- In the note view, a note that doesn't always play is drawn fainter: the less likely, the fainter.
+- Notes keep their probability when moved, stretched, copied, pasted, rotated or undone.
+- Right-click → **Set every note to always play (100% probability)** resets the selected track's notes in the pattern.
+
+### Clock rate
+
+Each track can step slower or faster than the clock: right-click → **Clock rate**.
+
+- **/2, /3, /4, /8**: the track takes one step every 2, 3, 4 or 8 clock steps. Its notes last that much longer, and so does its gate length.
+- **x2, x3, x4**: the track takes 2, 3 or 4 steps per clock step, evenly spread.
+- **x1** (the default): one step per clock step.
+
+The pattern lasts until its longest track ends **in clock steps**: a 16-step track at /2 takes 32 clock steps, so it makes the pattern 32 steps long. A 16-step track at x2 takes 8. Combine rates with track lengths for polymeters, for example a slow bass line at /4 under drums at x1.
+
+When the selected track's rate isn't x1, the step ruler's corner shows it ("/2", "x3") in the track's colour instead of "STEP". The rate is part of the track's setup, saved with the patch and undoable. Looping (pinned) tracks keep their rate too: they count it from the reset, so they stay in time through pattern changes.
+
 ---
 
 ## 8. Key: root and scale
@@ -340,7 +363,7 @@ The **GATE** display sets **where each note releases within its last step**, fro
 - **100% (legato)**: the gate stays high into the next note. Notes that follow each other directly are **tied** on every track: the gate doesn't drop between them, so envelopes don't retrigger.
 - **Tied notes** (Shift+click a note): the gate stays high to the very end of the last step. When the next note starts straight after it, the gate never drops, so the envelope doesn't retrigger and the pitch just changes. Use ties for slides and legato lines. A tied note followed by a rest still ends at its last step.
 
-Gate length follows the clock: with an external clock it uses the measured time between clock pulses.
+Gate length follows the clock: with an external clock it uses the measured time between clock pulses. It also follows each track's own step length: swung steps, and tracks with a different [clock rate](#clock-rate).
 
 ---
 
@@ -353,6 +376,12 @@ Gate length follows the clock: with an external clock it uses the measured time 
 ### External clock (CLK IN)
 
 When **CLK IN** is patched, the internal clock is ignored and the sequencer moves **one step per rising edge** (above about 2 V). The BPM display beside the TEMPO knob turns amber and shows the measured tempo. RUN still applies: clock pulses are ignored while stopped.
+
+### Swing
+
+Right-click → **Timing and sync** → the **Swing** slider, from 50% to 75%. At 50% (the default) the steps are straight. Above that, every second step of the pattern (the 2nd, 4th, 6th, …) comes late: at 66% it is about a triplet feel, at 75% it comes halfway through its step. The step before a late one lasts longer by as much, and the late one is that much shorter, so the beat stays in time. Gate lengths follow these longer and shorter steps.
+
+Swing works with the internal clock and with CLK IN: with an external clock the swung steps start after the clock pulse by the swing amount of the measured clock period. The **CLK** output follows the steps as they are played, swing included, so a sequencer that follows it swings along. If the following sequencer also has swing turned on, the swing is applied twice. The swing setting is saved with the patch.
 
 ### RUN
 
@@ -596,6 +625,9 @@ Right-click the module panel (not the grid's squares) to open the menu.
 | Track N | Set every track in this pattern to N steps | Copies the selected track's length to all 8 tracks of the pattern. |
 | Track N | Transpose track up / down one degree | Moves every note of the selected track one scale step up or down (same as Alt+wheel over the grid). Does nothing if a note would leave the grid. |
 | Track N | Rotate track one step later / earlier | Shifts every note of the selected track one step, wrapping at the track's end (same as Alt+Shift+wheel over the grid). |
+| Track N | Fill with a Euclidean rhythm | Submenu: **k of N** replaces the track's notes (within its length) with k one-step notes spread as evenly as possible over its N steps, the first on step 1, for example 3 of 8 gives x--x--x-. They use the pitch of the track's first note (or C4), and the menu shows a preview of each rhythm for tracks of up to 16 steps. Rotate the track to shift the rhythm. Undoable. |
+| Track N | Clock rate | /8, /4, /3, /2, x1 (default), x2, x3 or x4; see [Clock rate](#clock-rate). |
+| Track N | Set every note to always play (100% probability) | Resets the probability of every note on the selected track in this pattern; see [Note probability](#note-probability). |
 | Track N | MOD mode | **Per note** (NOTE) or **Per step** (STEP); see [MOD values](#mod-values). |
 | Track N | Per-step MOD glides from step to step | On (default): in STEP mode, MOD slides smoothly from one step's value to the next. Off: it jumps to each step's value as the step starts. |
 | Track N | MOD output range | The voltage range of the track's MOD output: 0 to 10 V, 0 to 5 V or -5 to +5 V. |
@@ -604,8 +636,9 @@ Right-click the module panel (not the grid's squares) to open the menu.
 | Song | Load song... / Save song... | Load or save everything in the sequencer as a song file; see [Naming, saving and loading songs](#naming-saving-and-loading-songs). |
 | Song | Import MIDI file... | Builds a song from a .mid file; see [Importing MIDI files](#importing-midi-files). |
 | Song | Clear song | Same as the SONG **CLR** button. |
-| Sync | RUN output: gate while running | RUN outputs a gate instead of start/stop triggers. |
-| Sync | RUN IN: gate, high = run | RUN IN reads a gate instead of toggling on triggers. |
+| Timing and sync | Swing | Slider, 50% (straight) to 75%; see [Swing](#swing). |
+| Timing and sync | RUN output: gate while running | RUN outputs a gate instead of start/stop triggers. |
+| Timing and sync | RUN IN: gate, high = run | RUN IN reads a gate instead of toggling on triggers. |
 | View | Follow playhead (show the steps that are playing) | While playing, when the selected track's playhead leaves the view, the grid turns to the 16-step block containing it. On by default; turn it off to pan freely while playing. |
 | View | Reset view to middle octave | Scrolls the grid back to the octave around C4 (0 V). |
 
@@ -618,7 +651,8 @@ The song strip has its own right-click menu for individual slots ([§12](#12-son
 ## 17. What is saved with the patch
 
 Everything is stored in the patch file and in Rack's autosave:
-- All 64 patterns: notes, note lengths, ties, MOD values and track lengths.
+- All 64 patterns: notes, note lengths, ties, MOD values, note probabilities and track lengths.
+- Each track's clock rate, and the swing setting.
 - Each track's voice count (poly tracks) and whether it sends its voices to their own mono jacks.
 - Which tracks loop a pinned pattern, and which pattern each one loops.
 - Each track's MOD mode, MOD output range and the MOD value new notes get, and every pattern's step MOD values.

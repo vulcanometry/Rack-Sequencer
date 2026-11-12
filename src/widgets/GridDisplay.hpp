@@ -28,6 +28,7 @@ struct GridDisplay : Widget {
 	int dragLength = 1;  // its length
 	bool dragTie = false;  // and whether it is tied
 	int dragMod = DEFAULT_MOD;  // and its MOD value
+	int dragProb = PROB_MAX;  // and its probability
 	int grabOffset = 0;  // move: grabbed step relative to the note start
 	int lastCol = -1;
 	int lastRow = -1;

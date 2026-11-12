@@ -13,6 +13,7 @@ struct Clipboard {
 	uint8_t patternLengths[NUM_LANES][NUM_STEPS];
 	uint8_t patternTies[NUM_LANES][NUM_STEPS];
 	uint8_t patternMods[NUM_LANES][NUM_STEPS];
+	uint8_t patternProbs[NUM_LANES][NUM_STEPS];
 	uint8_t patternStepMods[NUM_TRACKS][NUM_STEPS];
 	uint8_t patternTrackLengths[NUM_TRACKS];
 	bool hasTrack = false;
@@ -21,6 +22,7 @@ struct Clipboard {
 	uint8_t trackLengths[MAX_VOICES][NUM_STEPS];
 	uint8_t trackTies[MAX_VOICES][NUM_STEPS];
 	uint8_t trackMods[MAX_VOICES][NUM_STEPS];
+	uint8_t trackProbs[MAX_VOICES][NUM_STEPS];
 	uint8_t trackStepMods[NUM_STEPS];
 	uint8_t trackLength = DEFAULT_TRACK_LENGTH;
 };
@@ -58,6 +60,8 @@ struct GridSequencer : Module {
 		SONG_ADD_PARAM,
 		MOD_VIEW_PARAM,
 		GATE_LENGTH_PARAM,
+		PROB_VIEW_PARAM,
+		SWING_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
@@ -84,6 +88,7 @@ struct GridSequencer : Module {
 		ENUMS(MUTE_LIGHT, NUM_TRACKS),
 		ENUMS(GATE_LIGHT, NUM_TRACKS),
 		MOD_VIEW_LIGHT,
+		PROB_VIEW_LIGHT,
 		LIGHTS_LEN
 	};
 
@@ -97,6 +102,8 @@ struct GridSequencer : Module {
 	uint8_t ties[NUM_PATTERNS][NUM_LANES][NUM_STEPS];
 	// MOD value (0..MOD_MAX) of the note starting at each step, sent from the track's MOD output
 	uint8_t mods[NUM_PATTERNS][NUM_LANES][NUM_STEPS];
+	// Chance (0..PROB_MAX %) that the note starting at each step plays when its step comes round
+	uint8_t probs[NUM_PATTERNS][NUM_LANES][NUM_STEPS];
 	// Per track: MOD output range (index into MOD_RANGES), and the MOD value new notes get
 	// (the last one set on that track)
 	int modRange[NUM_TRACKS] = {};
@@ -108,10 +115,12 @@ struct GridSequencer : Module {
 	// Per-step mode: glide from each step's value to the next (true), or jump at each step
 	bool modSmooth[NUM_TRACKS];
 	// Per-step mode: the step each track glides towards (pattern and step; step -1 = none, as at
-	// the end of a play-once song), and how far through the current step playback is (0..1)
+	// the end of a play-once song), and how far through its current step each track is (0..1)
 	int modNextPattern[NUM_TRACKS] = {};
 	int modNextStep[NUM_TRACKS] = {};
-	float modPhase = 0.f;
+	float modPhase[NUM_TRACKS] = {};
+	// How fast each track steps (index into CLOCK_RATES; DEFAULT_CLOCK_RATE = with the clock)
+	int clockRate[NUM_TRACKS];
 	// Loop length of each track (1..NUM_STEPS). Notes past it are kept but not played.
 	uint8_t trackLengths[NUM_PATTERNS][NUM_TRACKS];
 	// Notes each track can play at once: 1 = an ordinary (mono) track, more = a poly track.
@@ -159,8 +168,30 @@ struct GridSequencer : Module {
 	int songPos = 0;
 	int playingPattern = 0;
 	double phase = 1.0;
+	// Time between clock steps (from TEMPO, or measured at CLK IN); how long the current step
+	// lasts (swing makes it longer or shorter); time since it started
 	double stepPeriod = 0.125;
+	double stepDuration = 0.125;
 	double stepTimer = 0.0;
+	// Steps played since playback was reset (looping tracks count clock divisions on this)
+	long clockCount = -1;
+	// A swung step waiting to start: the time left until it does (-1 = none waiting)
+	double swingWait = -1.0;
+	// Per track, for its clock rate: time since its last step and how long that step lasts, and
+	// which of its steps within the current clock step (sped-up tracks) comes next
+	double trackTimer[NUM_TRACKS] = {};
+	double trackDuration[NUM_TRACKS] = {};
+	int nextSubStep[NUM_TRACKS] = {};
+	// State before the last step, so a PAT IN trigger arriving just after it can redo it
+	struct RedoState {
+		long clockCount;
+		int loopStep[NUM_TRACKS];
+		int nextSubStep[NUM_TRACKS];
+		int holdLeft[NUM_LANES];
+	};
+	RedoState redo;
+	// PROB view was lit last time round (the MOD and PROB views turn each other off)
+	bool prevProbView = false;
 	double extClockTimer = 0.0;
 	bool prevRunning = false;
 	// PAT IN received: move to the next pattern on the next step
@@ -191,6 +222,7 @@ struct GridSequencer : Module {
 		uint8_t lengths[NUM_LANES][NUM_STEPS];
 		uint8_t ties[NUM_LANES][NUM_STEPS];
 		uint8_t mods[NUM_LANES][NUM_STEPS];
+		uint8_t probs[NUM_LANES][NUM_STEPS];
 		uint8_t stepMods[NUM_TRACKS][NUM_STEPS];
 		uint8_t trackLengths[NUM_TRACKS];
 	};
@@ -278,6 +310,7 @@ struct GridSequencer : Module {
 		int modRange[NUM_TRACKS];
 		int pinPattern[NUM_TRACKS];
 		bool modSmooth[NUM_TRACKS];
+		int clockRate[NUM_TRACKS];
 	};
 	void saveSettings(TrackSettings& t);
 	void loadSettings(const TrackSettings& t);
@@ -316,6 +349,26 @@ struct GridSequencer : Module {
 
 	bool modView() {
 		return params[MOD_VIEW_PARAM].getValue() > 0.5f;
+	}
+	bool probView() {
+		return params[PROB_VIEW_PARAM].getValue() > 0.5f;
+	}
+
+	const ClockRate& rate(int track) {
+		return CLOCK_RATES[clamp(clockRate[track], 0, (int) CLOCK_RATES.size() - 1)];
+	}
+	/** Clock steps `track` takes to play through its length once in `pattern`. */
+	int clockSteps(int pattern, int track) {
+		const ClockRate& r = rate(track);
+		return (trackLength(pattern, track) * r.div + r.mul - 1) / r.mul;
+	}
+	/** How late (as a fraction of a step) swing makes every second step: 0 = straight. */
+	double swingLate() {
+		return clamp(params[SWING_PARAM].getValue() / 50.f - 1.f, 0.f, 0.5f);
+	}
+	/** True if the next step is a swung one (the 2nd, 4th, ... of the pattern), so it comes late. */
+	bool swingsNext() {
+		return swingLate() > 0.0 && step >= 0 && step % 2 == 0 && step + 1 < patternLength(playingPattern);
 	}
 	/** Output voltage for a MOD value on a track. */
 	float modVoltage(int track, float value) {
@@ -356,7 +409,8 @@ struct GridSequencer : Module {
 
 	/**
 	 * Steps the pattern plays before moving on: its longest track with notes, or with no notes at
-	 * all, its longest track (16 steps for a new pattern).
+	 * all, its longest track (16 steps for a new pattern). Tracks count in clock steps, so a
+	 * 16-step track at /2 lasts 32.
 	 */
 	int patternLength(int pattern);
 
@@ -376,7 +430,7 @@ struct GridSequencer : Module {
 	}
 
 	/** Places a note within the track's length, trimming or removing whatever it overlaps in its lane. */
-	void placeNote(int pattern, int lane, int s, int row, int length, bool tie = false, int mod = -1);
+	void placeNote(int pattern, int lane, int s, int row, int length, bool tie = false, int mod = -1, int prob = PROB_MAX);
 
 	/** True if no note in `lane` sounds anywhere in steps [s, s + length). */
 	bool spanFree(int pattern, int lane, int s, int length);
@@ -408,6 +462,13 @@ struct GridSequencer : Module {
 	 * Notes stored past the track's end stay where they are.
 	 */
 	void rotateLane(int pattern, int lane, int length, int delta);
+
+	/**
+	 * Replaces a track's notes within its length with a Euclidean rhythm: `hits` notes spread
+	 * as evenly as they go, the first on step 1. They are one step long, on the pitch of the
+	 * track's first note (or the root of the middle octave).
+	 */
+	void euclideanFill(int pattern, int track, int hits);
 
 	/** Inserts a song slot before or after the cursor and moves the cursor to it. */
 	void songInsert(int pattern, bool after = true);
@@ -481,15 +542,32 @@ struct GridSequencer : Module {
 
 	// ---- Playback ----
 
-	/** Advances one step, then starts new notes and counts down the ones being held. */
-	void stepForward();
+	/**
+	 * Advances one clock step, then steps each track whose clock rate has it step now. `swung`:
+	 * this is a swung step, coming late (so it is that much shorter).
+	 */
+	void stepForward(bool swung = false);
+
+	/** Puts back the state from before the last step, so it can be taken again. */
+	void undoStep();
 
 	/**
-	 * For per-step MOD gliding: the step each track plays next. At the end of the pattern that is
-	 * step 1 of the next pattern (the next song slot, or the SEQ pattern); with PAT IN patched the
-	 * pattern is assumed to loop, as it does until a trigger arrives.
+	 * Takes one step of `track` (`sub`: which of its steps within the clock step, for a sped-up
+	 * track): starts its new notes, unless their probability says not, and counts down the ones
+	 * it is holding.
 	 */
-	void findNextModSteps();
+	void trackStepForward(int track, int sub);
+
+	/** Pattern that plays after the current one ends; -1 = none (a play-once song ends). */
+	int nextPattern();
+
+	/**
+	 * For per-step MOD gliding: the step `track` plays next (after its step `sub` of the clock
+	 * step). At the end of the pattern that is step 1 of the next pattern (the next song slot,
+	 * or the SEQ pattern); with PAT IN patched the pattern is assumed to loop, as it does until
+	 * a trigger arrives.
+	 */
+	void findNextModStep(int track, int sub);
 
 	/** Follow playhead: when the edited track's playhead is out of view, show the 16-step block it is in. */
 	void followPlayback();
@@ -518,8 +596,8 @@ struct GridSequencer : Module {
 
 	json_t* dataToJson() override;
 
-	/** Loads a lane's rows / lengths / ties / MOD values from their strings (any may be null). */
-	void laneFromStrings(int p, int l, const char* rows, const char* lens, const char* tieStr, const char* modStr);
+	/** Loads a lane's rows / lengths / ties / MOD values / probabilities from their strings (any may be null). */
+	void laneFromStrings(int p, int l, const char* rows, const char* lens, const char* tieStr, const char* modStr, const char* probStr);
 
 	void dataFromJson(json_t* rootJ) override;
 };

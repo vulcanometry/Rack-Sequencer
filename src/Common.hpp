@@ -50,6 +50,20 @@ const int DEFAULT_STEP_MOD = 0;
 // MOD modes: one value per note (held while it plays), or one value for every step
 enum ModMode { MOD_PER_NOTE, MOD_PER_STEP };
 
+// Chance (0..PROB_MAX %) that a note plays each time its step comes round
+const int PROB_MAX = 100;
+
+/** How fast a track steps: once every `div` sequencer steps, or `mul` times per step. */
+struct ClockRate {
+	const char* name;
+	int div, mul;
+};
+
+extern const std::vector<ClockRate> CLOCK_RATES;
+
+// Index of x1 in CLOCK_RATES
+const int DEFAULT_CLOCK_RATE = 4;
+
 // Every track has MAX_VOICES note lanes. An ordinary track plays lane 0 only; a poly track of N
 // voices plays lanes 0..N-1 together and sends them as an N-channel poly cable.
 const int NUM_LANES = NUM_TRACKS * MAX_VOICES;

@@ -71,6 +71,7 @@ std::string GridSequencer::importMidi(const MidiFileData& midi, const std::strin
 		std::memset(snap->lengths, 1, sizeof(snap->lengths));
 		std::memset(snap->ties, 0, sizeof(snap->ties));
 		std::memset(snap->mods, DEFAULT_MOD, sizeof(snap->mods));
+		std::memset(snap->probs, PROB_MAX, sizeof(snap->probs));
 		std::memset(snap->stepMods, DEFAULT_STEP_MOD, sizeof(snap->stepMods));
 		int chunkStart = c * NUM_STEPS, chunkEnd = chunkStart + NUM_STEPS;
 		// The last pattern is as long as what's left, in whole bars
@@ -113,6 +114,7 @@ std::string GridSequencer::importMidi(const MidiFileData& midi, const std::strin
 	std::memset(lengths, 1, sizeof(lengths));
 	std::memset(ties, 0, sizeof(ties));
 	std::memset(mods, DEFAULT_MOD, sizeof(mods));
+	std::memset(probs, PROB_MAX, sizeof(probs));
 	std::memset(stepMods, DEFAULT_STEP_MOD, sizeof(stepMods));
 	std::memset(trackLengths, DEFAULT_TRACK_LENGTH, sizeof(trackLengths));
 	for (size_t i = 0; i < distinct.size(); i++)
@@ -128,6 +130,7 @@ std::string GridSequencer::importMidi(const MidiFileData& midi, const std::strin
 		modRange[t] = 0;
 		modDefault[t] = DEFAULT_MOD;
 		pinPattern[t] = -1;
+		clockRate[t] = DEFAULT_CLOCK_RATE;
 		// Named after the MIDI track and channel its notes came from
 		trackNames[t] = (t < (int) used.size()) ? midi.parts[used[t]] : "";
 		muted[t] = false;
