@@ -1,7 +1,7 @@
 # Path to the Rack SDK. Override with `make RACK_DIR=/path/to/Rack-SDK`.
 RACK_DIR ?= D:/Source/SDK/Rack-SDK
 
-SOURCES += $(wildcard src/*.cpp)
+SOURCES += $(wildcard src/*.cpp src/widgets/*.cpp)
 
 DISTRIBUTABLES += res
 DISTRIBUTABLES += $(wildcard LICENSE*)
